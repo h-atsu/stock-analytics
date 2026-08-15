@@ -5,6 +5,7 @@ from typer.testing import CliRunner
 from stock_analytics.cli import app
 from stock_analytics.ingestion.storage import IngestionArtifact, ListedIssuesArtifact
 from stock_analytics.ingestion.yahoo import YahooIngestionResult
+from stock_analytics.publishing.bigquery import BigQueryLoadResult
 from stock_analytics.publishing.gcs import GcsPublishResult
 
 runner = CliRunner()
@@ -248,3 +249,35 @@ def test_publish_raw_command(monkeypatch, tmp_path: Path) -> None:
     assert result.exit_code == 0
     assert "uploaded_files=8" in result.stdout
     assert "skipped_files=2" in result.stdout
+
+
+def test_load_daily_bars_command(monkeypatch) -> None:
+    def fake_load(
+        bucket_name: str,
+        project_id: str,
+        dataset_id: str,
+    ) -> BigQueryLoadResult:
+        assert bucket_name == "raw-bucket"
+        assert project_id == "test-project"
+        assert dataset_id == "analytics"
+        return BigQueryLoadResult(loaded_partition_count=2, loaded_row_count=20)
+
+    monkeypatch.setattr("stock_analytics.cli.load_raw_daily_bars", fake_load)
+
+    result = runner.invoke(
+        app,
+        [
+            "load",
+            "daily-bars",
+            "--bucket",
+            "raw-bucket",
+            "--project",
+            "test-project",
+            "--dataset",
+            "analytics",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "loaded_partitions=2" in result.stdout
+    assert "loaded_rows=20" in result.stdout

@@ -20,13 +20,16 @@ from stock_analytics.ingestion.yahoo import (
     ingest_yahoo_daily_bars,
     load_latest_yahoo_tickers,
 )
+from stock_analytics.publishing.bigquery import load_raw_daily_bars
 from stock_analytics.publishing.gcs import publish_raw_artifacts
 
 app = typer.Typer(no_args_is_help=True, help="Stock analytics data pipeline.")
 ingest_app = typer.Typer(no_args_is_help=True, help="Ingest source data.")
 publish_app = typer.Typer(no_args_is_help=True, help="Publish validated data.")
+load_app = typer.Typer(no_args_is_help=True, help="Load published data.")
 app.add_typer(ingest_app, name="ingest")
 app.add_typer(publish_app, name="publish")
+app.add_typer(load_app, name="load")
 
 
 def _parse_iso_date(value: str) -> date:
@@ -286,3 +289,29 @@ def publish_raw(
 
     typer.echo(f"uploaded_files={result.uploaded_count}")
     typer.echo(f"skipped_files={result.skipped_count}")
+
+
+@load_app.command("daily-bars")
+def load_daily_bars(
+    bucket: Annotated[
+        str,
+        typer.Option("--bucket", help="raw artifactのGCS bucket名。"),
+    ],
+    project: Annotated[
+        str,
+        typer.Option("--project", help="BigQueryのGCP project ID。"),
+    ],
+    dataset: Annotated[
+        str,
+        typer.Option("--dataset", help="BigQuery dataset ID。"),
+    ] = "stock_analytics",
+) -> None:
+    """J-QuantsとYahoo Financeの日足をBigQueryへloadする。"""
+    try:
+        result = load_raw_daily_bars(bucket, project, dataset)
+    except Exception as exc:
+        typer.echo(f"BigQuery loadに失敗しました: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(f"loaded_partitions={result.loaded_partition_count}")
+    typer.echo(f"loaded_rows={result.loaded_row_count}")

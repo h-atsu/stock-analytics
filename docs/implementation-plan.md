@@ -314,7 +314,7 @@ yfinanceの取得条件は実装内の固定値から開始し、不要なCLIオ
 - raw objectは`ingested_at`付きのimmutable pathに保存するため、bucket versioningと自動削除は現時点で追加しない。
 - raw GCS追加後のoffline Terraform planは合計6 resources add、0 change、0 destroyで成功した。
 
-### Task 10: GCS publishとBigQuery load — 着手（GCS publish実装済み）
+### Task 10: GCS publishとBigQuery load — 着手（日足loadまで実装済み）
 
 - 検証済みParquetだけをGCSへuploadする。
 - rawテーブルは`trade_date` partition、`security_code` clusterとする。
@@ -333,6 +333,12 @@ yfinanceの取得条件は実装内の固定値から開始し、不要なCLIオ
 - `google-cloud-storage` 3.1.1以上を直接依存として明示した。
 - GCS publishの自動テスト3件とCLIテスト1件が成功した。
 - 実bucket `${project_id}-stock-analytics-raw` へのpublishが成功することを確認した。
+- 最初のBigQuery load対象は分析の起点になるJ-Quants・Yahoo Financeの日足に限定した。
+- manifestが存在する完了済みartifactだけを、`raw_jquants_equity_daily_bars`と`raw_yahoo_equity_daily_bars`へloadする。
+- 日付partition decoratorと`WRITE_TRUNCATE`を使い、同じloadの再実行で行を追加しない。
+- 同一日付の複数ingestはrawに保持し、Task 11のdbt stagingで`_ingested_at`が最新の行を採用する。
+- `stock-analytics load daily-bars --project ... --bucket ...`を追加した。
+- BigQuery loadの自動テスト2件とCLIテスト1件が成功した。実datasetへのloadは未実施。
 
 ### Task 11: dbt staging — 未着手
 

@@ -2640,6 +2640,7 @@ source = { editable = "." }
 dependencies = [
     { name = "dbt-bigquery" },
     { name = "dbt-core" },
+    { name = "google-cloud-bigquery" },
     { name = "google-cloud-storage" },
     { name = "jquants-api-client" },
     { name = "pandera", extra = ["pandas", "polars"] },
@@ -2665,6 +2666,7 @@ dev = [
 requires-dist = [
     { name = "dbt-bigquery", specifier = ">=1.12.0" },
     { name = "dbt-core", specifier = ">=1.12.2" },
+    { name = "google-cloud-bigquery", specifier = ">=3.43.0" },
     { name = "google-cloud-storage", specifier = ">=3.1.1" },
     { name = "jquants-api-client", specifier = ">=2.4.0" },
     { name = "pandera", extras = ["pandas", "polars"], specifier = ">=0.32.1" },

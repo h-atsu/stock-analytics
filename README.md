@@ -127,6 +127,21 @@ uv run stock-analytics publish raw \
   --source-dir data/raw
 ```
 
+## 日足rawデータのBigQuery load
+
+GCSへpublish済みのJ-Quants・Yahoo Finance日足を、日付partition単位でBigQueryへloadします。同じ日付の再実行はpartitionを置き換えるため、loadによる重複は発生しません。
+
+```bash
+uv run stock-analytics load daily-bars \
+  --project YOUR_GCP_PROJECT_ID \
+  --bucket YOUR_GCP_PROJECT_ID-stock-analytics-raw
+```
+
+作成されるrawテーブル:
+
+- `raw_jquants_equity_daily_bars`（`Date` partition、`Code` cluster）
+- `raw_yahoo_equity_daily_bars`（`trade_date` partition、`yahoo_ticker` cluster）
+
 ## Docker実行
 
 Cloud Run Jobで使用する本番イメージをローカルでビルドできます。`.env`と取得済みデータはイメージに含まれません。
