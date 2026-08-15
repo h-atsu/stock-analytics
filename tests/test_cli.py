@@ -5,6 +5,7 @@ from typer.testing import CliRunner
 from stock_analytics.cli import app
 from stock_analytics.ingestion.storage import IngestionArtifact, ListedIssuesArtifact
 from stock_analytics.ingestion.yahoo import YahooIngestionResult
+from stock_analytics.publishing.gcs import GcsPublishResult
 
 runner = CliRunner()
 
@@ -222,3 +223,28 @@ def test_yahoo_daily_bars_command(monkeypatch, tmp_path: Path) -> None:
     assert "rows=10" in result.stdout
     assert "available_tickers=1" in result.stdout
     assert "no_data_tickers=1" in result.stdout
+
+
+def test_publish_raw_command(monkeypatch, tmp_path: Path) -> None:
+    def fake_publish(source_dir: Path, bucket_name: str) -> GcsPublishResult:
+        assert source_dir == tmp_path
+        assert bucket_name == "raw-bucket"
+        return GcsPublishResult(uploaded_count=8, skipped_count=2)
+
+    monkeypatch.setattr("stock_analytics.cli.publish_raw_artifacts", fake_publish)
+
+    result = runner.invoke(
+        app,
+        [
+            "publish",
+            "raw",
+            "--bucket",
+            "raw-bucket",
+            "--source-dir",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "uploaded_files=8" in result.stdout
+    assert "skipped_files=2" in result.stdout

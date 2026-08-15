@@ -110,6 +110,23 @@ uv run stock-analytics ingest yahoo-daily-bars \
 
 取得結果は取引日別Parquet、tickerごとの取得可否はcoverage Parquetへ保存します。Yahoo Financeデータは個人・研究用途の暫定補完として扱います。
 
+## raw artifactのGCS publish
+
+`data/raw`配下の`data.parquet`と対応する`manifest.json`をGCSへpublishします。ParquetはmanifestのSHA-256と照合し、同じobjectが存在する場合は上書きせずスキップします。
+
+```bash
+uv run stock-analytics publish raw \
+  --bucket YOUR_GCP_PROJECT_ID-stock-analytics-raw
+```
+
+出力元を変更する場合:
+
+```bash
+uv run stock-analytics publish raw \
+  --bucket YOUR_GCP_PROJECT_ID-stock-analytics-raw \
+  --source-dir data/raw
+```
+
 ## Docker実行
 
 Cloud Run Jobで使用する本番イメージをローカルでビルドできます。`.env`と取得済みデータはイメージに含まれません。

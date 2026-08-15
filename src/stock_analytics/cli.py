@@ -20,10 +20,13 @@ from stock_analytics.ingestion.yahoo import (
     ingest_yahoo_daily_bars,
     load_latest_yahoo_tickers,
 )
+from stock_analytics.publishing.gcs import publish_raw_artifacts
 
 app = typer.Typer(no_args_is_help=True, help="Stock analytics data pipeline.")
 ingest_app = typer.Typer(no_args_is_help=True, help="Ingest source data.")
+publish_app = typer.Typer(no_args_is_help=True, help="Publish validated data.")
 app.add_typer(ingest_app, name="ingest")
+app.add_typer(publish_app, name="publish")
 
 
 def _parse_iso_date(value: str) -> date:
@@ -256,3 +259,30 @@ def yahoo_daily_bars(
     typer.echo(f"available_tickers={result.available_ticker_count}")
     typer.echo(f"no_data_tickers={result.no_data_ticker_count}")
     typer.echo(f"coverage={result.coverage_artifact.data_path}")
+
+
+@publish_app.command("raw")
+def publish_raw(
+    bucket: Annotated[
+        str,
+        typer.Option("--bucket", help="publish先のGCS bucket名。"),
+    ],
+    source_dir: Annotated[
+        Path,
+        typer.Option(
+            "--source-dir",
+            help="local rawデータのルート。",
+            file_okay=False,
+            dir_okay=True,
+        ),
+    ] = Path("data/raw"),
+) -> None:
+    """検証済みParquetとmanifestをGCSへpublishする。"""
+    try:
+        result = publish_raw_artifacts(source_dir, bucket)
+    except Exception as exc:
+        typer.echo(f"publishに失敗しました: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(f"uploaded_files={result.uploaded_count}")
+    typer.echo(f"skipped_files={result.skipped_count}")

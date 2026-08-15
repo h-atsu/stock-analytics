@@ -314,7 +314,7 @@ yfinanceの取得条件は実装内の固定値から開始し、不要なCLIオ
 - raw objectは`ingested_at`付きのimmutable pathに保存するため、bucket versioningと自動削除は現時点で追加しない。
 - raw GCS追加後のoffline Terraform planは合計6 resources add、0 change、0 destroyで成功した。
 
-### Task 10: GCS publishとBigQuery load — 未着手
+### Task 10: GCS publishとBigQuery load — 着手（GCS publish実装済み）
 
 - 検証済みParquetだけをGCSへuploadする。
 - rawテーブルは`trade_date` partition、`security_code` clusterとする。
@@ -322,6 +322,17 @@ yfinanceの取得条件は実装内の固定値から開始し、不要なCLIオ
 - 最初はsourceごとの明示的処理を書き、汎用loaderを作らない。
 
 完了条件: 同一日付を2回loadしても重複しないこと。
+
+実装・検証結果（2026-08-16、途中）:
+
+- `data/raw`配下の`data.parquet`と対応する`manifest.json`だけを検出し、local rootからの相対pathをGCS object名としてpublishする。
+- publish前に全ParquetのSHA-256をmanifestと照合し、1つでも不一致またはmanifest欠落があれば送信を開始せず失敗する。
+- `if_generation_match=0`で既存objectを上書きせず、再実行時はskip件数に計上する。
+- JPXの`source.xls`など、Parquet・manifest以外のファイルはpublish対象外とする。
+- `stock-analytics publish raw --bucket ... --source-dir data/raw`を追加した。
+- `google-cloud-storage` 3.1.1以上を直接依存として明示した。
+- GCS publishの自動テスト3件とCLIテスト1件が成功した。
+- 実bucket `${project_id}-stock-analytics-raw` へのpublishが成功することを確認した。
 
 ### Task 11: dbt staging — 未着手
 
