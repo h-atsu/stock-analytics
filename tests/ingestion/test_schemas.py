@@ -4,7 +4,7 @@ import pandas as pd
 import pandera.pandas as pa
 import pytest
 
-from stock_analytics.ingestion.schemas import daily_bars_model
+from stock_analytics.ingestion.schemas import daily_bars_model, equity_master_model
 
 
 def valid_daily_bars() -> pd.DataFrame:
@@ -28,6 +28,26 @@ def valid_daily_bars() -> pd.DataFrame:
             "AdjVo": [1000.0, None],
             "MktCap": [1_000_000.0, None],
             "ExRT": [None, None],
+        }
+    )
+
+
+def valid_equity_master() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "Date": pd.to_datetime(["2024-07-25", "2024-07-25"]),
+            "Code": ["13010", "130A0"],
+            "CoName": ["極洋", "テスト株式会社"],
+            "CoNameEn": ["KYOKUYO CO.,LTD.", "TEST CO.,LTD."],
+            "S17": ["1", "10"],
+            "S17Nm": ["食品", "情報通信・サービスその他"],
+            "S33": ["0050", "5250"],
+            "S33Nm": ["水産・農林業", "情報・通信業"],
+            "ScaleCat": ["TOPIX Small 1", "-"],
+            "Mkt": ["0111", "0113"],
+            "MktNm": ["プライム", "グロース"],
+            "Mrgn": ["1", "2"],
+            "MrgnNm": ["信用", "貸借"],
         }
     )
 
@@ -77,3 +97,35 @@ def test_daily_bars_model_rejects_unknown_column() -> None:
 
     with pytest.raises(pa.errors.SchemaErrors, match="Unexpected"):
         daily_bars_model(date(2024, 7, 25)).validate(frame, lazy=True)
+
+
+def test_equity_master_model_accepts_alphanumeric_code() -> None:
+    validated = equity_master_model(date(2024, 7, 25)).validate(
+        valid_equity_master(), lazy=True
+    )
+
+    assert validated["Code"].tolist() == ["13010", "130A0"]
+
+
+@pytest.mark.parametrize(
+    ("mutate", "expected"),
+    [
+        (
+            lambda frame: frame.assign(Date=pd.Timestamp("2024-07-24")),
+            "matches_requested_snapshot_date",
+        ),
+        (lambda frame: frame.assign(Code="1301"), "str_matches"),
+    ],
+)
+def test_equity_master_model_rejects_invalid_rows(mutate, expected: str) -> None:
+    with pytest.raises(pa.errors.SchemaErrors, match=expected):
+        equity_master_model(date(2024, 7, 25)).validate(
+            mutate(valid_equity_master()), lazy=True
+        )
+
+
+def test_equity_master_model_rejects_duplicate_date_and_code() -> None:
+    frame = valid_equity_master().iloc[[0, 0]].reset_index(drop=True)
+
+    with pytest.raises(pa.errors.SchemaErrors, match="multiple_fields_uniqueness"):
+        equity_master_model(date(2024, 7, 25)).validate(frame, lazy=True)

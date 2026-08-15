@@ -7,8 +7,12 @@ from typing import Protocol
 import jquantsapi
 import pandas as pd
 
-from stock_analytics.ingestion.schemas import daily_bars_model
-from stock_analytics.ingestion.storage import IngestionArtifact, store_daily_bars
+from stock_analytics.ingestion.schemas import daily_bars_model, equity_master_model
+from stock_analytics.ingestion.storage import (
+    IngestionArtifact,
+    store_daily_bars,
+    store_equity_master,
+)
 
 
 class DailyBarsClient(Protocol):
@@ -19,6 +23,10 @@ class DailyBarsClient(Protocol):
         to_yyyymmdd: str = "",
         date_yyyymmdd: str = "",
     ) -> pd.DataFrame: ...
+
+
+class EquityMasterClient(Protocol):
+    def get_eq_master(self, code: str = "", date: str = "") -> pd.DataFrame: ...
 
 
 def fetch_daily_bars(
@@ -41,6 +49,31 @@ def ingest_daily_bars(
     return store_daily_bars(
         validated,
         trade_date,
+        output_root,
+        ingested_at=ingested_at,
+    )
+
+
+def fetch_equity_master(
+    snapshot_date: date,
+    client: EquityMasterClient | None = None,
+) -> pd.DataFrame:
+    api_client = client or jquantsapi.ClientV2()
+    return api_client.get_eq_master(date=snapshot_date.strftime("%Y%m%d"))
+
+
+def ingest_equity_master(
+    snapshot_date: date,
+    output_root: Path,
+    *,
+    client: EquityMasterClient | None = None,
+    ingested_at: datetime | None = None,
+) -> IngestionArtifact:
+    frame = fetch_equity_master(snapshot_date, client)
+    validated = equity_master_model(snapshot_date).validate(frame, lazy=True)
+    return store_equity_master(
+        validated,
+        snapshot_date,
         output_root,
         ingested_at=ingested_at,
     )

@@ -9,7 +9,7 @@ import pandera.pandas as pa
 import typer
 from dotenv import load_dotenv
 
-from stock_analytics.ingestion.jquants import ingest_daily_bars
+from stock_analytics.ingestion.jquants import ingest_daily_bars, ingest_equity_master
 
 app = typer.Typer(no_args_is_help=True, help="Stock analytics data pipeline.")
 ingest_app = typer.Typer(no_args_is_help=True, help="Ingest source data.")
@@ -47,6 +47,40 @@ def daily_bars(
 
     try:
         artifact = ingest_daily_bars(parsed_date, output_dir)
+    except pa.errors.SchemaErrors as exc:
+        typer.echo(f"データ検証に失敗しました:\n{exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    except Exception as exc:
+        typer.echo(f"取り込みに失敗しました: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(f"rows={artifact.row_count}")
+    typer.echo(f"parquet={artifact.data_path}")
+    typer.echo(f"manifest={artifact.manifest_path}")
+
+
+@ingest_app.command("equity-master")
+def equity_master(
+    snapshot_date: Annotated[
+        str,
+        typer.Option("--date", help="取得対象の基準日（YYYY-MM-DD）。"),
+    ],
+    output_dir: Annotated[
+        Path,
+        typer.Option(
+            "--output-dir",
+            help="rawデータの出力ルート。",
+            file_okay=False,
+            dir_okay=True,
+        ),
+    ] = Path("data/raw/jquants"),
+) -> None:
+    """J-Quantsの銘柄マスターを検証してParquetへ保存する。"""
+    parsed_date = _parse_iso_date(snapshot_date)
+    load_dotenv(dotenv_path=Path.cwd() / ".env", override=False)
+
+    try:
+        artifact = ingest_equity_master(parsed_date, output_dir)
     except pa.errors.SchemaErrors as exc:
         typer.echo(f"データ検証に失敗しました:\n{exc}", err=True)
         raise typer.Exit(code=1) from exc

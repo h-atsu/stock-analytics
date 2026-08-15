@@ -1,0 +1,298 @@
+# 東証株価分析基盤 実装計画
+
+最終更新日: 2026-08-15
+
+## 進め方
+
+- 各タスクは「設計確認 → 1タスクだけ実装 → 検証 → この計画を更新 → 停止」の順で進める。
+- 次のタスクへ自動的に進まない。実装前にユーザーと設計を確認する。
+- YAGNIを優先し、実際の重複や要件が生じるまで基底クラス、汎用リポジトリ、dataset registry、プラグイン構造を作らない。
+- 新しいセッションでは、最初にこのファイルと`git status`を確認する。
+- ユーザーの未コミット変更は保持し、対象タスクと無関係なファイルを変更しない。
+
+## アーキテクチャ
+
+J-Quantsを最終的な正本、Yahoo Financeを直近期間の暫定データとして扱う。
+
+```text
+J-Quants ─────── raw_jquants ─┐
+                               ├─ staging ─ intermediate ─ mart_stock_daily
+Yahoo Finance ─ raw_yfinance ─┘                  │
+                                                 └─ J-Quants優先で自動差し替え
+JPX銘柄一覧 ──── raw_jpx ────── 銘柄コード・Yahoo ticker対応
+```
+
+- 同一銘柄・取引日に両方の価格が存在する場合はJ-Quantsを採用する。
+- 後日J-Quantsデータが到着したら、dbtの再実行だけでYahoo由来の行を置き換える。
+- rawではベンダー値を加工せず、価格調整とsource precedenceはdbtで処理する。
+- Yahoo Financeは個人・研究用途の暫定補完に限定する。
+
+## 確定したインターフェース
+
+既存CLI:
+
+```text
+stock-analytics ingest daily-bars --date YYYY-MM-DD
+```
+
+追加予定CLI:
+
+```text
+stock-analytics ingest listed-issues
+stock-analytics ingest yahoo-daily-bars --start-date YYYY-MM-DD --end-date YYYY-MM-DD
+stock-analytics ingest equity-master --date YYYY-MM-DD
+stock-analytics ingest financial-summary --date YYYY-MM-DD
+stock-analytics backfill --start-date YYYY-MM-DD --end-date YYYY-MM-DD
+stock-analytics pipeline daily --as-of YYYY-MM-DD
+```
+
+yfinanceの取得条件は実装内の固定値から開始し、不要なCLIオプションは増やさない。
+
+- `interval="1d"`
+- `auto_adjust=False`
+- `actions=True`
+- `keepna=True`
+- 100 ticker単位で逐次取得
+- 一時エラーは2秒、4秒、8秒で最大3回リトライ
+- 日次処理は直近7暦日をローリング再取得
+- 初回はJ-Quantsと同じ約2年分を取得
+- `end`は排他的として扱う
+
+## 現在のデータ契約
+
+### J-Quants株価日足
+
+- API endpoint: `/equities/bars/daily`
+- dataset名: `equity_daily_bars`
+- Panderaの`DailyBars` `DataFrameModel`で検証する。
+- 実行時の取引日制約だけ`daily_bars_model(trade_date)` factoryで追加する。
+- factoryを呼ぶだけの薄い検証関数は作らない。
+- 入力列はstrictとし、未知の列をエラーにする。
+- `Code`は数字または英大文字からなる5文字とする。
+- `(Date, Code)`を一意キーとする。
+- `Date`は要求した取引日と一致させる。
+- 出来高、売買代金、時価総額、調整後出来高は、値がある場合は0以上とする。
+- `AdjFactor`は0より大きい値とする。
+- 高値は安値以上、調整後高値は調整後安値以上とする。
+- 売買がない行を表現できるよう、OHLC、出来高などの市場値はnullableとする。
+- 空のDataFrameは受け付けない。休場日などのno-dataを正常終了にする変更は日次パイプライン設計時に別途判断する。
+
+### ローカル保存
+
+保存先はrun単位の追記型とする。
+
+```text
+<output-root>/equity_daily_bars/
+  trade_date=YYYY-MM-DD/
+    ingested_at=YYYYMMDDTHHMMSS.ffffffZ/
+      data.parquet
+      manifest.json
+```
+
+- `ingested_at`はtimezone-awareで受け取り、UTCへ正規化する。
+- Parquetには`_ingested_at`と`_source`を付加する。
+- `Date`はParquet保存時に日付型へ変換する。
+- Parquetとmanifestは一時ファイルを書いてからatomic replaceする。
+- 同一の`ingested_at` partitionは上書きせずエラーにする。
+- manifestにはdataset、trade date、UTC ingestion time、row count、source、schema version、ParquetのSHA-256を保存する。
+
+### Task 1検証結果
+
+2026-08-15時点の基準状態:
+
+- `uv run pytest`: 11件成功
+- `uv run ruff check .`: 成功
+- `uv run ty check`: 成功
+- 既存実装は上記契約を満たしているため、Task 1でPythonコードは変更していない。
+- `pyproject.toml`と`uv.lock`にあるyfinance追加は、Task 0開始前から存在するユーザー変更として保持した。
+
+## タスク一覧
+
+### Task 0: 計画をリポジトリへ保存 — 完了
+
+- 本計画を`docs/implementation-plan.md`へ保存する。
+- タスクの状態、設計判断、検証結果を別セッションから参照可能にする。
+
+完了条件: 新しいセッションがこのファイルから次の1タスクを判断できること。
+
+### Task 1: 既存日足ingestionの契約を確定 — 完了
+
+- J-Quants日足、Pandera、Parquet、manifestの現行仕様を確定する。
+- 動的な取引日検証にはschema factoryを使う。
+- 薄い転送ラッパーを追加しない。
+
+完了条件: 現行チェックがすべて通り、契約がこのファイルに記録されていること。
+
+### Task 2: J-Quants銘柄マスター取得 — 完了
+
+- 上場銘柄情報を日次スナップショットとして取得する。
+- Pandera `DataFrameModel`で型、コード、一意性を検証する。
+- 既存日足と同じParquet・manifest規約で保存する。
+
+完了条件: 任意日付の銘柄マスターを取得でき、再実行可能であること。
+
+実装・検証結果（2026-08-15）:
+
+- V2 `/equities/master`の13列を`EquityMaster` `DataFrameModel`で検証する。
+- 実行時の基準日制約は`equity_master_model(snapshot_date)` factoryで追加する。
+- `(Date, Code)`を一意キーとし、数字・英大文字からなる5桁コードを受け付ける。
+- 業種、市場、信用区分のaccepted valuesはraw schemaで固定しない。
+- `equity_master/snapshot_date=YYYY-MM-DD/ingested_at=...`へParquetとmanifestを保存する。
+- CLIは`stock-analytics ingest equity-master --date YYYY-MM-DD`とする。
+- 自動テスト18件、Ruff、tyが成功した。
+- 実APIで2024-07-25時点の4,378行を取得・検証・一時保存できた。
+
+### Task 3: J-Quants財務サマリー取得 — 未着手
+
+- 財務情報を開示日単位で取得する。
+- rawでは欠損を許容し、型と一意性を検証する。
+- ファンダメンタル指標はまだ計算しない。
+
+完了条件: 財務サマリーをParquetへ保存し、fixtureテストが通ること。
+
+### Task 4: セクター・市場区分マスター — 未着手
+
+- 安定した小規模マスターはdbt seedで管理する。
+- 汎用マスター管理層は作らない。
+
+完了条件: seedの一意性・not nullテストが通ること。
+
+### Task 5: JPX現行上場銘柄一覧の取得 — 未着手
+
+- JPX公式Excelの原本と正規化Parquetを保存する。
+- 日次確認し、SHA-256が変わった場合だけ新スナップショットを保存する。
+- ETF、REIT等を除外せず、東証上場商品をすべて対象にする。
+- JPXコードからYahoo ticker候補を生成する。
+
+完了条件: 同じ公式ファイルから重複スナップショットが作られないこと。
+
+### Task 6: yfinance日足・コーポレートアクション取得 — 未着手
+
+- JPX一覧を対象に、100 ticker単位で日足、配当、株式分割を取得する。
+- raw OHLC、volume、`Adj Close`、dividend、stock splitを日付別Parquetへ保存する。
+- responseにないtickerはcoverage結果へ`no_data`として記録する。
+- 通信失敗は3回リトライ後に非ゼロ終了する。
+- `BaseIngestor`やdataset registryは作らない。
+
+完了条件: 複数銘柄、配当、分割、欠損tickerを処理できること。
+
+### Task 7: 本番Dockerイメージ — 未着手
+
+- Cloud Run Jobと同じイメージをローカル実行可能にする。
+- `.env`をイメージに含めない。
+- CLIをentrypointにする。
+- devcontainerは具体的な必要性が出るまで追加しない。
+
+完了条件: 少数銘柄の取得からParquet保存までコンテナ内で動くこと。
+
+### Task 8: Terraform bootstrap — 未着手
+
+- Terraform state用GCS bucketとArtifact Registryを作る。
+- dev単一環境、手動apply、手動イメージpushから始める。
+
+完了条件: 空のGCPプロジェクトから`terraform init/plan/apply`を再現できること。
+
+### Task 9: データ基盤Terraform — 未着手
+
+- raw用GCS bucketを作る。
+- BigQuery datasetsとして`raw_jquants`、`raw_yfinance`、`raw_jpx`、`staging`、`intermediate`、`marts`を作る。
+- Secret Manager、service account、最小権限IAM、Cloud Run Job、Cloud Schedulerを作る。
+- ローカルは`.env`、Cloud RunはSecret Managerを利用する。
+
+完了条件: secret値がstateやコードに含まれず、IAMが必要最小限であること。
+
+### Task 10: GCS publishとBigQuery load — 未着手
+
+- 検証済みParquetだけをGCSへuploadする。
+- rawテーブルは`trade_date` partition、`security_code` clusterとする。
+- 同一キーの再取得で論理的な重複を作らない。
+- 最初はsourceごとの明示的処理を書き、汎用loaderを作らない。
+
+完了条件: 同一日付を2回loadしても重複しないこと。
+
+### Task 11: dbt staging — 未着手
+
+- source freshness、not null、unique、accepted valuesを定義する。
+- source別に列名、型、security codeを正規化する。
+- 同一source・銘柄・日付は最新の`_ingested_at`を採用する。
+
+完了条件: rawから正規化済みstagingを`dbt build`で再現できること。
+
+### Task 12: dbt intermediateとcanonical価格 — 未着手
+
+- Yahooのsplitからsplit-adjusted OHLC/volumeを計算する。
+- J-Quantsは提供されたadjusted列を使う。
+- 同一銘柄・日付ではJ-Quantsを優先する。
+- J-Quants後着時にdbt再実行だけでYahoo行を置き換える。
+- 当初はincrementalを使わず、table再構築で運用する。
+- overlapでraw close、split-adjusted close、volume、corporate actionを比較する。
+- 相対価格差0.1%超をwarning、1%超をerrorとする。
+
+完了条件: source片側、両側、後着、split、dividendのdbtテストが通ること。
+
+### Task 13: 最小マート — 未着手
+
+- `mart_stock_daily`を作る。
+- raw価格、split-adjusted価格、price return、total returnを区別する。
+- `price_source`、`corporate_action_source`、`is_provisional`を持たせる。
+- ファンダメンタル指標とポートフォリオ分析はまだ実装しない。
+
+完了条件: 分析側がsource固有列を意識せず日足を参照できること。
+
+### Task 14: 初回バックフィル — 未着手
+
+- J-QuantsとYahooを約2年分取得する。
+- JPX現行一覧、銘柄マスター、財務サマリーも取得する。
+- 成功済み日次ファイルをskipして中断後に再開可能にする。
+- checkpoint管理基盤は作らない。
+
+完了条件: 再実行可能で、J-QuantsとYahooの重複比較を確認できること。
+
+### Task 15: 日次パイプライン — 未着手
+
+`pipeline daily --as-of`で次を直列実行する。
+
+1. JPX一覧のハッシュを確認する。
+2. J-Quantsの`as-of - 84日`付近を取得する。
+3. Yahooの`as-of - 7日`から`as-of`まで再取得する。
+4. Panderaで検証する。
+5. GCSへuploadする。
+6. BigQueryへloadする。
+7. `dbt build`を実行する。
+
+Asia/Tokyoを基準にする。休場日やno-dataは正常なno-opとし、検証失敗は後続へ渡さない。
+
+完了条件: 固定した`as-of`でローカルとCloud Run Jobの結果が一致すること。
+
+### Task 16: Cloud Run Jobと運用確認 — 未着手
+
+- 平日21時JSTに単一Cloud Run Jobを起動する。
+- 初期値は2 vCPU、4 GiB、最大60分、Scheduler retry最大3回とする。
+- 件数、対象期間、source、所要時間、欠損ticker数を構造化ログへ出す。
+- 初回backfillは手動Job実行にする。
+- Cloud Logging alertで失敗を通知する。
+
+完了条件: 日次実行、再実行、欠損ticker、J-Quants後着、secret参照をGCP上で確認できること。
+
+## 全体テスト方針
+
+- Pandera: 型、キー重複、日付範囲、価格・出来高制約
+- ingestion: 正常、空、pagination、欠損、通信失敗のfixtureテスト
+- Yahoo: MultiIndex、英数字コード、ETF/REIT、配当、分割、no-data ticker
+- dbt: unique、not null、relationships、source precedence、後着差し替え
+- finance: 2-for-1 split、現金配当、splitと配当の同日発生
+- idempotency: 同一期間を複数回実行して行数が増えない
+- container: secretをイメージへ含めずCLIを実行できる
+- Terraform: `fmt`、`validate`、`plan`
+
+## 現時点で対象外
+
+- Airflow、Workflows、Pub/Sub、Dataflow
+- devcontainer
+- CI/CDによる自動deploy
+- 複数Cloud Run Jobへの分割
+- ファンダメンタルスコア
+- ロバストポートフォリオ
+- ダッシュボード
+
+これらは`mart_stock_daily`の品質確認後に必要性を再評価する。

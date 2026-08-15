@@ -12,6 +12,8 @@ import pandas as pd
 
 DATASET_NAME = "equity_daily_bars"
 SOURCE_ENDPOINT = "/equities/bars/daily"
+EQUITY_MASTER_DATASET_NAME = "equity_master"
+EQUITY_MASTER_SOURCE_ENDPOINT = "/equities/master"
 SCHEMA_VERSION = 1
 
 
@@ -65,11 +67,14 @@ def _write_json_atomically(payload: dict[str, object], target: Path) -> None:
         temporary_path.unlink(missing_ok=True)
 
 
-def store_daily_bars(
+def _store_date_partition(
     frame: pd.DataFrame,
-    trade_date: date,
+    partition_date: date,
     output_root: Path,
     *,
+    dataset_name: str,
+    source_endpoint: str,
+    partition_name: str,
     ingested_at: datetime | None = None,
 ) -> IngestionArtifact:
     timestamp = ingested_at or datetime.now(UTC)
@@ -80,8 +85,8 @@ def store_daily_bars(
     run_partition = timestamp.strftime("%Y%m%dT%H%M%S.%fZ")
     output_dir = (
         output_root
-        / DATASET_NAME
-        / f"trade_date={trade_date.isoformat()}"
+        / dataset_name
+        / f"{partition_name}={partition_date.isoformat()}"
         / f"ingested_at={run_partition}"
     )
     output_dir.mkdir(parents=True, exist_ok=False)
@@ -89,18 +94,18 @@ def store_daily_bars(
     stored_frame = frame.copy()
     stored_frame["Date"] = pd.to_datetime(stored_frame["Date"]).dt.date
     stored_frame["_ingested_at"] = timestamp
-    stored_frame["_source"] = SOURCE_ENDPOINT
+    stored_frame["_source"] = source_endpoint
 
     data_path = output_dir / "data.parquet"
     manifest_path = output_dir / "manifest.json"
     _write_parquet_atomically(stored_frame, data_path)
 
     manifest: dict[str, object] = {
-        "dataset": DATASET_NAME,
-        "trade_date": trade_date.isoformat(),
+        "dataset": dataset_name,
+        partition_name: partition_date.isoformat(),
         "ingested_at": timestamp.isoformat().replace("+00:00", "Z"),
         "row_count": len(stored_frame),
-        "source": SOURCE_ENDPOINT,
+        "source": source_endpoint,
         "schema_version": SCHEMA_VERSION,
         "sha256": _sha256(data_path),
     }
@@ -110,4 +115,40 @@ def store_daily_bars(
         data_path=data_path,
         manifest_path=manifest_path,
         row_count=len(stored_frame),
+    )
+
+
+def store_daily_bars(
+    frame: pd.DataFrame,
+    trade_date: date,
+    output_root: Path,
+    *,
+    ingested_at: datetime | None = None,
+) -> IngestionArtifact:
+    return _store_date_partition(
+        frame,
+        trade_date,
+        output_root,
+        dataset_name=DATASET_NAME,
+        source_endpoint=SOURCE_ENDPOINT,
+        partition_name="trade_date",
+        ingested_at=ingested_at,
+    )
+
+
+def store_equity_master(
+    frame: pd.DataFrame,
+    snapshot_date: date,
+    output_root: Path,
+    *,
+    ingested_at: datetime | None = None,
+) -> IngestionArtifact:
+    return _store_date_partition(
+        frame,
+        snapshot_date,
+        output_root,
+        dataset_name=EQUITY_MASTER_DATASET_NAME,
+        source_endpoint=EQUITY_MASTER_SOURCE_ENDPOINT,
+        partition_name="snapshot_date",
+        ingested_at=ingested_at,
     )
