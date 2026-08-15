@@ -255,7 +255,7 @@ yfinanceの取得条件は実装内の固定値から開始し、不要なCLIオ
 - 100銘柄・2年分の実測で`threads=True`は13.6秒、`threads=False`は23.4秒だったため、バッチ内のスレッド並列を有効化した。
 - Yahoo Financeは個人・研究用途の暫定sourceとして扱い、J-Quants到着後に置換する。
 
-### Task 7: 本番Dockerイメージ — 未着手
+### Task 7: 本番Dockerイメージ — 完了
 
 - Cloud Run Jobと同じイメージをローカル実行可能にする。
 - `.env`をイメージに含めない。
@@ -263,6 +263,17 @@ yfinanceの取得条件は実装内の固定値から開始し、不要なCLIオ
 - devcontainerは具体的な必要性が出るまで追加しない。
 
 完了条件: 少数銘柄の取得からParquet保存までコンテナ内で動くこと。
+
+実装・検証結果（2026-08-16）:
+
+- Python 3.12.13 slimとuv 0.11.19を固定し、`uv.lock`に基づく本番依存だけをinstallする`Dockerfile`を追加した。
+- `stock-analytics`をentrypointにし、Cloud Run JobでCLI引数をそのまま指定できる形にした。
+- `.dockerignore`で`.env`、`data`、`.git`、テスト、notebook、dbt生成物をbuild contextから除外した。
+- uvのダウンロードキャッシュとbytecodeをイメージに残さず、ローカルイメージサイズを3.1GBから1.5GBへ削減した。
+- READMEにbuild、CLI起動、`.env`と出力ディレクトリの実行時mount手順を追加した。
+- イメージ内に`/app/.env`と`/app/data`が存在しないことを確認した。
+- 最終イメージで`7203.T`の2026-08-10から2026-08-14を実取得し、4行の日足を4個の日別Parquetとcoverageへ保存できた。
+- devcontainerは追加していない。
 
 ### Task 8: Terraform bootstrap — 未着手
 

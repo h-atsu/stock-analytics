@@ -110,6 +110,25 @@ uv run stock-analytics ingest yahoo-daily-bars \
 
 取得結果は取引日別Parquet、tickerごとの取得可否はcoverage Parquetへ保存します。Yahoo Financeデータは個人・研究用途の暫定補完として扱います。
 
+## Docker実行
+
+Cloud Run Jobで使用する本番イメージをローカルでビルドできます。`.env`と取得済みデータはイメージに含まれません。
+
+```bash
+docker build -t stock-analytics:local .
+docker run --rm stock-analytics:local --help
+```
+
+J-Quantsの取得時は、ローカルの`.env`を環境変数として渡し、出力先をmountします。
+
+```bash
+docker run --rm \
+  --env-file .env \
+  --mount type=bind,source="$PWD/data",target=/app/data \
+  stock-analytics:local \
+  ingest daily-bars --date 2024-07-25
+```
+
 ## 開発時の検証
 
 ```bash
