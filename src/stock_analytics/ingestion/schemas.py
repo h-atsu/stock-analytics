@@ -152,3 +152,38 @@ def financial_summary_model(disclosure_date: date) -> type[FinancialSummary]:
         f"FinancialSummary_{disclosure_date:%Y%m%d}"
     )
     return FinancialSummaryForDisclosureDate
+
+
+class EarningsDate(pa.DataFrameModel):
+    """J-Quants `/fins/earnings-date` response contract."""
+
+    PubDate: Series[pd.Timestamp]
+    SchDate: Series[pd.Timestamp] = pa.Field(nullable=True)
+    FQName: Series[str]
+    FYE: Series[str]
+    Code: Series[str] = pa.Field(str_matches=r"^[0-9A-Z]{5}$")
+    CoName: Series[str]
+    CoNameEn: Series[str]
+
+    @pa.dataframe_check
+    def is_not_empty(cls, frame: pd.DataFrame) -> bool:
+        return not frame.empty
+
+    class Config:
+        strict = True
+        unique: ClassVar[list[str]] = ["PubDate", "Code", "FQName"]
+        name = "jquants_earnings_date"
+
+
+def earnings_date_model(publication_date: date) -> type[EarningsDate]:
+    """Create an earnings-date contract scoped to the publication date."""
+
+    class EarningsDateForPublicationDate(EarningsDate):
+        @pa.check("PubDate")
+        def matches_requested_publication_date(
+            cls, series: Series[pd.Timestamp]
+        ) -> Series[bool]:
+            return series.dt.date.eq(publication_date)
+
+    EarningsDateForPublicationDate.__name__ = f"EarningsDate_{publication_date:%Y%m%d}"
+    return EarningsDateForPublicationDate

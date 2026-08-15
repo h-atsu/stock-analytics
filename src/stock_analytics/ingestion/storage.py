@@ -16,6 +16,8 @@ EQUITY_MASTER_DATASET_NAME = "equity_master"
 EQUITY_MASTER_SOURCE_ENDPOINT = "/equities/master"
 FINANCIAL_SUMMARY_DATASET_NAME = "financial_summary"
 FINANCIAL_SUMMARY_SOURCE_ENDPOINT = "/fins/summary"
+EARNINGS_DATE_DATASET_NAME = "earnings_date"
+EARNINGS_DATE_SOURCE_ENDPOINT = "/fins/earnings-date"
 SCHEMA_VERSION = 1
 
 
@@ -174,5 +176,24 @@ def store_financial_summary(
         source_endpoint=FINANCIAL_SUMMARY_SOURCE_ENDPOINT,
         partition_name="disclosure_date",
         date_column="DiscDate",
+        ingested_at=ingested_at,
+    )
+
+
+def store_earnings_date(
+    frame: pd.DataFrame,
+    publication_date: date,
+    output_root: Path,
+    *,
+    ingested_at: datetime | None = None,
+) -> IngestionArtifact:
+    return _store_date_partition(
+        frame,
+        publication_date,
+        output_root,
+        dataset_name=EARNINGS_DATE_DATASET_NAME,
+        source_endpoint=EARNINGS_DATE_SOURCE_ENDPOINT,
+        partition_name="publication_date",
+        date_column="PubDate",
         ingested_at=ingested_at,
     )

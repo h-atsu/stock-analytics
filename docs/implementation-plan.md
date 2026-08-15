@@ -42,6 +42,7 @@ stock-analytics ingest listed-issues
 stock-analytics ingest yahoo-daily-bars --start-date YYYY-MM-DD --end-date YYYY-MM-DD
 stock-analytics ingest equity-master --date YYYY-MM-DD
 stock-analytics ingest financial-summary --date YYYY-MM-DD
+stock-analytics ingest earnings-date --date YYYY-MM-DD
 stock-analytics backfill --start-date YYYY-MM-DD --end-date YYYY-MM-DD
 stock-analytics pipeline daily --as-of YYYY-MM-DD
 ```
@@ -183,6 +184,26 @@ yfinanceの取得条件は実装内の固定値から開始し、不要なCLIオ
 - CSVは17業種18行、33業種34行、市場区分10行で、一意性・非空・参照整合性を確認した。
 - BigQueryへの`dbt seed`とdata testの実行は、GCP環境構築後に行う。
 
+### Task 4.5: 決算発表予定日取得 — 完了
+
+- `/fins/earnings-date`を公表日単位で取得する。
+- rawでは予定日の変更・未定を含む履歴をすべて保持する。
+- 最新予定日の導出はdbt intermediateで行う。
+
+完了条件: 公表日単位の決算予定日を検証し、Parquetとmanifestへ保存できること。
+
+実装・検証結果（2026-08-15）:
+
+- 7列をstrictな`EarningsDate` `DataFrameModel`で検証する。
+- `(PubDate, Code, FQName)`を一意キーとする。
+- 実行時の公表日制約は`earnings_date_model(publication_date)` factoryで追加する。
+- 予定日未定を表現するため`SchDate`はnullableとする。
+- `earnings_date/publication_date=YYYY-MM-DD/ingested_at=...`へ保存する。
+- CLIは`stock-analytics ingest earnings-date --date YYYY-MM-DD`とする。
+- 自動テスト31件、Ruff、format、ty、dbt parseが成功した。
+- 実APIで2024-07-25公表分の20行を取得、検証、一時保存できた。
+- Freeの遅延があるため、直近の決算回避ではなく履歴分析用として扱う。
+
 ### Task 5: JPX現行上場銘柄一覧の取得 — 未着手
 
 - JPX公式Excelの原本と正規化Parquetを保存する。
@@ -253,6 +274,7 @@ yfinanceの取得条件は実装内の固定値から開始し、不要なCLIオ
 - 当初はincrementalを使わず、table再構築で運用する。
 - overlapでraw close、split-adjusted close、volume、corporate actionを比較する。
 - 相対価格差0.1%超をwarning、1%超をerrorとする。
+- 決算予定履歴から銘柄・決算期ごとの最新予定日を導出する。
 
 完了条件: source片側、両側、後着、split、dividendのdbtテストが通ること。
 
@@ -268,7 +290,7 @@ yfinanceの取得条件は実装内の固定値から開始し、不要なCLIオ
 ### Task 14: 初回バックフィル — 未着手
 
 - J-QuantsとYahooを約2年分取得する。
-- JPX現行一覧、銘柄マスター、財務サマリーも取得する。
+- JPX現行一覧、銘柄マスター、財務サマリー、決算予定履歴も取得する。
 - 成功済み日次ファイルをskipして中断後に再開可能にする。
 - checkpoint管理基盤は作らない。
 
@@ -279,7 +301,7 @@ yfinanceの取得条件は実装内の固定値から開始し、不要なCLIオ
 `pipeline daily --as-of`で次を直列実行する。
 
 1. JPX一覧のハッシュを確認する。
-2. J-Quantsの`as-of - 84日`付近を取得する。
+2. J-Quantsの`as-of - 84日`付近の日足、財務サマリー、決算予定履歴を取得する。
 3. Yahooの`as-of - 7日`から`as-of`まで再取得する。
 4. Panderaで検証する。
 5. GCSへuploadする。

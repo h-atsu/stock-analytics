@@ -56,6 +56,22 @@ uv run stock-analytics ingest financial-summary \
   --output-dir data/raw/jquants
 ```
 
+## 決算発表予定日の取得
+
+指定した公表日に登録・変更された決算発表予定日を検証し、履歴として保存します。
+
+```bash
+uv run stock-analytics ingest earnings-date --date 2024-07-25
+```
+
+出力先を変更する場合:
+
+```bash
+uv run stock-analytics ingest earnings-date \
+  --date 2024-07-25 \
+  --output-dir data/raw/jquants
+```
+
 ## 開発時の検証
 
 ```bash

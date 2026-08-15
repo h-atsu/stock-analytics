@@ -9,12 +9,14 @@ import pandas as pd
 
 from stock_analytics.ingestion.schemas import (
     daily_bars_model,
+    earnings_date_model,
     equity_master_model,
     financial_summary_model,
 )
 from stock_analytics.ingestion.storage import (
     IngestionArtifact,
     store_daily_bars,
+    store_earnings_date,
     store_equity_master,
     store_financial_summary,
 )
@@ -41,6 +43,15 @@ class FinancialSummaryClient(Protocol):
         date_yyyymmdd: str = "",
         cursor: str = "",
     ) -> tuple[pd.DataFrame, str | None]: ...
+
+
+class EarningsDateClient(Protocol):
+    def get_fin_earnings_date(
+        self,
+        code: str = "",
+        date_yyyymmdd: str = "",
+        scheduled_date_yyyymmdd: str = "",
+    ) -> pd.DataFrame: ...
 
 
 def fetch_daily_bars(
@@ -116,6 +127,33 @@ def ingest_financial_summary(
     return store_financial_summary(
         validated,
         disclosure_date,
+        output_root,
+        ingested_at=ingested_at,
+    )
+
+
+def fetch_earnings_date(
+    publication_date: date,
+    client: EarningsDateClient | None = None,
+) -> pd.DataFrame:
+    api_client = client or jquantsapi.ClientV2()
+    return api_client.get_fin_earnings_date(
+        date_yyyymmdd=publication_date.strftime("%Y%m%d")
+    )
+
+
+def ingest_earnings_date(
+    publication_date: date,
+    output_root: Path,
+    *,
+    client: EarningsDateClient | None = None,
+    ingested_at: datetime | None = None,
+) -> IngestionArtifact:
+    frame = fetch_earnings_date(publication_date, client)
+    validated = earnings_date_model(publication_date).validate(frame, lazy=True)
+    return store_earnings_date(
+        validated,
+        publication_date,
         output_root,
         ingested_at=ingested_at,
     )

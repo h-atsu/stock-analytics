@@ -6,11 +6,13 @@ import pandas as pd
 
 from stock_analytics.ingestion.storage import (
     store_daily_bars,
+    store_earnings_date,
     store_equity_master,
     store_financial_summary,
 )
 from tests.ingestion.test_schemas import (
     valid_daily_bars,
+    valid_earnings_date,
     valid_equity_master,
     valid_financial_summary,
 )
@@ -117,4 +119,38 @@ def test_store_financial_summary_writes_disclosure_partition(tmp_path) -> None:
         "schema_version": 1,
         "sha256": expected_hash,
         "source": "/fins/summary",
+    }
+
+
+def test_store_earnings_date_writes_publication_partition(tmp_path) -> None:
+    ingested_at = datetime(2026, 8, 15, 12, 0, tzinfo=UTC)
+
+    artifact = store_earnings_date(
+        valid_earnings_date(),
+        date(2024, 7, 25),
+        tmp_path,
+        ingested_at=ingested_at,
+    )
+
+    assert artifact.data_path == (
+        tmp_path
+        / "earnings_date"
+        / "publication_date=2024-07-25"
+        / "ingested_at=20260815T120000.000000Z"
+        / "data.parquet"
+    )
+    stored = pd.read_parquet(artifact.data_path)
+    assert stored["FQName"].tolist() == ["FY", "1Q"]
+    assert stored["_source"].unique().tolist() == ["/fins/earnings-date"]
+
+    manifest = json.loads(artifact.manifest_path.read_text(encoding="utf-8"))
+    expected_hash = hashlib.sha256(artifact.data_path.read_bytes()).hexdigest()
+    assert manifest == {
+        "dataset": "earnings_date",
+        "ingested_at": "2026-08-15T12:00:00Z",
+        "publication_date": "2024-07-25",
+        "row_count": 2,
+        "schema_version": 1,
+        "sha256": expected_hash,
+        "source": "/fins/earnings-date",
     }

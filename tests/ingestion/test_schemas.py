@@ -7,6 +7,7 @@ from jquantsapi.constants import FIN_SUMMARY_COLUMNS_V2
 
 from stock_analytics.ingestion.schemas import (
     daily_bars_model,
+    earnings_date_model,
     equity_master_model,
     financial_summary_model,
 )
@@ -81,6 +82,20 @@ def valid_financial_summary() -> pd.DataFrame:
     frame["NxtFYEn"] = pd.to_datetime([None, "2026-03-31"])
     frame["Sales"] = [1_000_000, None]
     return frame
+
+
+def valid_earnings_date() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "PubDate": pd.to_datetime(["2024-07-25", "2024-07-25"]),
+            "SchDate": pd.to_datetime(["2024-08-09", None]),
+            "FQName": ["FY", "1Q"],
+            "FYE": ["2024-06-30", "2025-03-31"],
+            "Code": ["13010", "130A0"],
+            "CoName": ["極洋", "テスト株式会社"],
+            "CoNameEn": ["KYOKUYO CO.,LTD.", "TEST CO.,LTD."],
+        }
+    )
 
 
 def test_daily_bars_model_accepts_nullable_no_trade_row() -> None:
@@ -197,3 +212,28 @@ def test_financial_summary_model_rejects_duplicate_disclosure() -> None:
 
     with pytest.raises(pa.errors.SchemaErrors, match="multiple_fields_uniqueness"):
         financial_summary_model(date(2024, 7, 25)).validate(frame, lazy=True)
+
+
+def test_earnings_date_model_accepts_undecided_schedule() -> None:
+    validated = earnings_date_model(date(2024, 7, 25)).validate(
+        valid_earnings_date(), lazy=True
+    )
+
+    assert len(validated) == 2
+    assert pd.isna(validated["SchDate"].iloc[1])
+
+
+def test_earnings_date_model_rejects_other_publication_date() -> None:
+    frame = valid_earnings_date().assign(PubDate=pd.Timestamp("2024-07-24"))
+
+    with pytest.raises(
+        pa.errors.SchemaErrors, match="matches_requested_publication_date"
+    ):
+        earnings_date_model(date(2024, 7, 25)).validate(frame, lazy=True)
+
+
+def test_earnings_date_model_rejects_duplicate_event() -> None:
+    frame = valid_earnings_date().iloc[[0, 0]].reset_index(drop=True)
+
+    with pytest.raises(pa.errors.SchemaErrors, match="multiple_fields_uniqueness"):
+        earnings_date_model(date(2024, 7, 25)).validate(frame, lazy=True)
