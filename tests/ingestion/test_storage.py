@@ -9,12 +9,14 @@ from stock_analytics.ingestion.storage import (
     store_earnings_date,
     store_equity_master,
     store_financial_summary,
+    store_jpx_listed_issues,
 )
 from tests.ingestion.test_schemas import (
     valid_daily_bars,
     valid_earnings_date,
     valid_equity_master,
     valid_financial_summary,
+    valid_jpx_listed_issues,
 )
 
 
@@ -154,3 +156,52 @@ def test_store_earnings_date_writes_publication_partition(tmp_path) -> None:
         "sha256": expected_hash,
         "source": "/fins/earnings-date",
     }
+
+
+def test_store_jpx_listed_issues_writes_source_and_skips_same_hash(tmp_path) -> None:
+    ingested_at = datetime(2026, 8, 15, 12, 0, tzinfo=UTC)
+    source_content = b"source excel"
+    source_url = "https://www.jpx.co.jp/example/data_j.xls"
+
+    artifact = store_jpx_listed_issues(
+        valid_jpx_listed_issues(),
+        source_content,
+        source_url,
+        tmp_path,
+        ingested_at=ingested_at,
+    )
+
+    assert artifact is not None
+    assert artifact.source_path.read_bytes() == source_content
+    assert artifact.data_path == (
+        tmp_path
+        / "listed_issues"
+        / "snapshot_date=2026-07-31"
+        / "ingested_at=20260815T120000.000000Z"
+        / "data.parquet"
+    )
+    stored = pd.read_parquet(artifact.data_path)
+    assert stored["security_code"].tolist() == ["1301", "25935"]
+    assert stored["_source"].unique().tolist() == [source_url]
+
+    manifest = json.loads(artifact.manifest_path.read_text(encoding="utf-8"))
+    expected_hash = hashlib.sha256(artifact.data_path.read_bytes()).hexdigest()
+    assert manifest == {
+        "dataset": "listed_issues",
+        "ingested_at": "2026-08-15T12:00:00Z",
+        "row_count": 2,
+        "schema_version": 1,
+        "sha256": expected_hash,
+        "snapshot_date": "2026-07-31",
+        "source": source_url,
+        "source_sha256": hashlib.sha256(source_content).hexdigest(),
+    }
+
+    duplicate = store_jpx_listed_issues(
+        valid_jpx_listed_issues(),
+        source_content,
+        source_url,
+        tmp_path,
+        ingested_at=datetime(2026, 8, 16, 12, 0, tzinfo=UTC),
+    )
+    assert duplicate is None

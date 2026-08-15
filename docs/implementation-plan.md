@@ -204,7 +204,7 @@ yfinanceの取得条件は実装内の固定値から開始し、不要なCLIオ
 - 実APIで2024-07-25公表分の20行を取得、検証、一時保存できた。
 - Freeの遅延があるため、直近の決算回避ではなく履歴分析用として扱う。
 
-### Task 5: JPX現行上場銘柄一覧の取得 — 未着手
+### Task 5: JPX現行上場銘柄一覧の取得 — 完了
 
 - JPX公式Excelの原本と正規化Parquetを保存する。
 - 日次確認し、SHA-256が変わった場合だけ新スナップショットを保存する。
@@ -213,9 +213,23 @@ yfinanceの取得条件は実装内の固定値から開始し、不要なCLIオ
 
 完了条件: 同じ公式ファイルから重複スナップショットが作られないこと。
 
+実装・検証結果（2026-08-15）:
+
+- JPX公式ページのHTMLから現在の`data_j.xls` URLを発見して取得する。
+- Excel原本、正規化Parquet、manifestを月末スナップショットとして保存する。
+- source ExcelのSHA-256が保存済みの場合は`unchanged=true`で終了する。
+- 10列の公式データをsnake_caseへ正規化し、`-`をnullへ変換する。
+- 33業種コードはdbt seedと結合できる4桁文字列へゼロ埋めする。
+- `JpxListedIssues` `DataFrameModel`で列、型、コード一意性、単一基準日を検証する。
+- 4桁英数字コードには`{security_code}.T`をYahoo ticker候補として付与する。
+- 5桁の種類株式は別銘柄への誤対応を避けるためYahoo tickerをnullにする。
+- `.xls`読込の直接依存として`xlrd`を追加した。
+- 自動テスト40件、Ruff、format、ty、dbt parseが成功した。
+- 実データで2026-07-31時点の4,444銘柄を保存し、同一ファイルの再取得がskipされることを確認した。
+
 ### Task 6: yfinance日足・コーポレートアクション取得 — 未着手
 
-- JPX一覧を対象に、100 ticker単位で日足、配当、株式分割を取得する。
+- JPX一覧のYahoo ticker候補がある銘柄を対象に、100 ticker単位で日足、配当、株式分割を取得する。
 - raw OHLC、volume、`Adj Close`、dividend、stock splitを日付別Parquetへ保存する。
 - responseにないtickerはcoverage結果へ`no_data`として記録する。
 - 通信失敗は3回リトライ後に非ゼロ終了する。

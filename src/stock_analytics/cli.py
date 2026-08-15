@@ -9,6 +9,7 @@ import pandera.pandas as pa
 import typer
 from dotenv import load_dotenv
 
+from stock_analytics.ingestion.jpx import ingest_listed_issues
 from stock_analytics.ingestion.jquants import (
     ingest_daily_bars,
     ingest_earnings_date,
@@ -162,5 +163,37 @@ def earnings_date(
         raise typer.Exit(code=1) from exc
 
     typer.echo(f"rows={artifact.row_count}")
+    typer.echo(f"parquet={artifact.data_path}")
+    typer.echo(f"manifest={artifact.manifest_path}")
+
+
+@ingest_app.command("listed-issues")
+def listed_issues(
+    output_dir: Annotated[
+        Path,
+        typer.Option(
+            "--output-dir",
+            help="rawデータの出力ルート。",
+            file_okay=False,
+            dir_okay=True,
+        ),
+    ] = Path("data/raw/jpx"),
+) -> None:
+    """JPXの現行上場銘柄一覧を検証し、変更時だけ保存する。"""
+    try:
+        artifact = ingest_listed_issues(output_dir)
+    except pa.errors.SchemaErrors as exc:
+        typer.echo(f"データ検証に失敗しました:\n{exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    except Exception as exc:
+        typer.echo(f"取り込みに失敗しました: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    if artifact is None:
+        typer.echo("unchanged=true")
+        return
+
+    typer.echo(f"rows={artifact.row_count}")
+    typer.echo(f"source={artifact.source_path}")
     typer.echo(f"parquet={artifact.data_path}")
     typer.echo(f"manifest={artifact.manifest_path}")

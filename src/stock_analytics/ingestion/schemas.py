@@ -187,3 +187,40 @@ def earnings_date_model(publication_date: date) -> type[EarningsDate]:
 
     EarningsDateForPublicationDate.__name__ = f"EarningsDate_{publication_date:%Y%m%d}"
     return EarningsDateForPublicationDate
+
+
+class JpxListedIssues(pa.DataFrameModel):
+    """Normalized JPX listed-issues spreadsheet contract."""
+
+    snapshot_date: Series[pd.Timestamp]
+    security_code: Series[str] = pa.Field(str_matches=r"^[0-9A-Z]{4,5}$")
+    security_name: Series[str]
+    market_product_category: Series[str]
+    sector_33_code: Series[str] = pa.Field(nullable=True, str_matches=r"^[0-9]{4}$")
+    sector_33_name: Series[str] = pa.Field(nullable=True)
+    sector_17_code: Series[str] = pa.Field(nullable=True, str_matches=r"^[0-9]{1,2}$")
+    sector_17_name: Series[str] = pa.Field(nullable=True)
+    scale_code: Series[str] = pa.Field(nullable=True, str_matches=r"^[0-9]+$")
+    scale_category: Series[str] = pa.Field(nullable=True)
+    yahoo_ticker: Series[str] = pa.Field(nullable=True, str_matches=r"^[0-9A-Z]{4}\.T$")
+
+    @pa.dataframe_check
+    def is_not_empty(cls, frame: pd.DataFrame) -> bool:
+        return not frame.empty
+
+    @pa.dataframe_check
+    def has_one_snapshot_date(cls, frame: pd.DataFrame) -> bool:
+        return frame["snapshot_date"].nunique() == 1
+
+    @pa.dataframe_check
+    def yahoo_ticker_matches_security_code(cls, frame: pd.DataFrame) -> Series[bool]:
+        is_standard_code = frame["security_code"].str.len().eq(4)
+        ticker = frame["yahoo_ticker"].fillna("")
+        return (is_standard_code & ticker.eq(frame["security_code"] + ".T")) | (
+            ~is_standard_code & ticker.eq("")
+        )
+
+    class Config:
+        strict = True
+        unique = "security_code"
+        name = "jpx_listed_issues"

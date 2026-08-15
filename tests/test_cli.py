@@ -3,7 +3,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from stock_analytics.cli import app
-from stock_analytics.ingestion.storage import IngestionArtifact
+from stock_analytics.ingestion.storage import IngestionArtifact, ListedIssuesArtifact
 
 runner = CliRunner()
 
@@ -140,3 +140,40 @@ def test_earnings_date_command(monkeypatch, tmp_path: Path) -> None:
     assert result.exit_code == 0
     assert "rows=20" in result.stdout
     assert f"parquet={artifact.data_path}" in result.stdout
+
+
+def test_listed_issues_command(monkeypatch, tmp_path: Path) -> None:
+    artifact = ListedIssuesArtifact(
+        source_path=tmp_path / "source.xls",
+        data_path=tmp_path / "data.parquet",
+        manifest_path=tmp_path / "manifest.json",
+        row_count=4444,
+    )
+    monkeypatch.setattr(
+        "stock_analytics.cli.ingest_listed_issues",
+        lambda output_dir: artifact,
+    )
+
+    result = runner.invoke(
+        app,
+        ["ingest", "listed-issues", "--output-dir", str(tmp_path)],
+    )
+
+    assert result.exit_code == 0
+    assert "rows=4444" in result.stdout
+    assert f"source={artifact.source_path}" in result.stdout
+
+
+def test_listed_issues_command_reports_unchanged(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(
+        "stock_analytics.cli.ingest_listed_issues",
+        lambda output_dir: None,
+    )
+
+    result = runner.invoke(
+        app,
+        ["ingest", "listed-issues", "--output-dir", str(tmp_path)],
+    )
+
+    assert result.exit_code == 0
+    assert result.stdout == "unchanged=true\n"

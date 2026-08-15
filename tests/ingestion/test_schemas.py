@@ -6,6 +6,7 @@ import pytest
 from jquantsapi.constants import FIN_SUMMARY_COLUMNS_V2
 
 from stock_analytics.ingestion.schemas import (
+    JpxListedIssues,
     daily_bars_model,
     earnings_date_model,
     equity_master_model,
@@ -94,6 +95,27 @@ def valid_earnings_date() -> pd.DataFrame:
             "Code": ["13010", "130A0"],
             "CoName": ["極洋", "テスト株式会社"],
             "CoNameEn": ["KYOKUYO CO.,LTD.", "TEST CO.,LTD."],
+        }
+    )
+
+
+def valid_jpx_listed_issues() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "snapshot_date": pd.to_datetime(["2026-07-31", "2026-07-31"]),
+            "security_code": ["1301", "25935"],
+            "security_name": ["極洋", "伊藤園第１種優先株式"],
+            "market_product_category": [
+                "プライム（内国株式）",
+                "プライム（内国株式）",
+            ],
+            "sector_33_code": ["0050", "3050"],
+            "sector_33_name": ["水産・農林業", "食料品"],
+            "sector_17_code": ["1", "1"],
+            "sector_17_name": ["食品", "食品"],
+            "scale_code": ["6", None],
+            "scale_category": ["TOPIX Small 1", None],
+            "yahoo_ticker": ["1301.T", pd.NA],
         }
     )
 
@@ -237,3 +259,28 @@ def test_earnings_date_model_rejects_duplicate_event() -> None:
 
     with pytest.raises(pa.errors.SchemaErrors, match="multiple_fields_uniqueness"):
         earnings_date_model(date(2024, 7, 25)).validate(frame, lazy=True)
+
+
+def test_jpx_listed_issues_accepts_standard_and_class_share_codes() -> None:
+    validated = JpxListedIssues.validate(valid_jpx_listed_issues(), lazy=True)
+
+    assert validated["yahoo_ticker"].iloc[0] == "1301.T"
+    assert pd.isna(validated["yahoo_ticker"].iloc[1])
+
+
+def test_jpx_listed_issues_rejects_incorrect_yahoo_ticker() -> None:
+    frame = valid_jpx_listed_issues()
+    frame.loc[1, "yahoo_ticker"] = "2593.T"
+
+    with pytest.raises(
+        pa.errors.SchemaErrors, match="yahoo_ticker_matches_security_code"
+    ):
+        JpxListedIssues.validate(frame, lazy=True)
+
+
+def test_jpx_listed_issues_rejects_multiple_snapshot_dates() -> None:
+    frame = valid_jpx_listed_issues()
+    frame.loc[1, "snapshot_date"] = pd.Timestamp("2026-06-30")
+
+    with pytest.raises(pa.errors.SchemaErrors, match="has_one_snapshot_date"):
+        JpxListedIssues.validate(frame, lazy=True)

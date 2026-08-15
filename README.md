@@ -72,6 +72,22 @@ uv run stock-analytics ingest earnings-date \
   --output-dir data/raw/jquants
 ```
 
+## JPX現行上場銘柄一覧の取得
+
+JPX公式ページから現行のExcelを取得し、原本と正規化Parquetを保存します。同じExcelが保存済みの場合はスキップします。
+
+```bash
+uv run stock-analytics ingest listed-issues
+```
+
+出力先を変更する場合:
+
+```bash
+uv run stock-analytics ingest listed-issues --output-dir data/raw/jpx
+```
+
+4桁の銘柄コードにはYahoo ticker候補として`.T`を付与します。5桁の種類株式は誤った銘柄へ対応付けないため、Yahoo tickerをnullにします。
+
 ## 開発時の検証
 
 ```bash
