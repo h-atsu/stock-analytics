@@ -240,7 +240,7 @@ yfinanceの取得条件は実装内の固定値から開始し、不要なCLIオ
 実装・検証結果（2026-08-16）:
 
 - 最新のJPX listed-issues Parquetからnon-nullのYahoo ticker候補を読み込む。
-- 100 ticker単位、`threads=False`で逐次取得する。
+- 100 ticker単位のバッチは逐次実行し、各バッチ内は`threads=True`で取得する。
 - `auto_adjust=False`、`actions=True`、`keepna=True`、`repair=False`を固定する。
 - CLIの開始日・終了日は包含とし、yfinanceの排他的endには1日加算して渡す。
 - 通信例外は2秒、4秒、8秒の待機で最大3回リトライする。
@@ -252,6 +252,7 @@ yfinanceの取得条件は実装内の固定値から開始し、不要なCLIオ
 - `stock-analytics ingest yahoo-daily-bars --start-date ... --end-date ...`を追加した。
 - 自動テスト50件、Ruff、format、ty、dbt parseが成功した。
 - 実APIで株式2銘柄とETF 1銘柄の6営業日、計18行を取得・検証・一時保存できた。
+- 100銘柄・2年分の実測で`threads=True`は13.6秒、`threads=False`は23.4秒だったため、バッチ内のスレッド並列を有効化した。
 - Yahoo Financeは個人・研究用途の暫定sourceとして扱い、J-Quants到着後に置換する。
 
 ### Task 7: 本番Dockerイメージ — 未着手

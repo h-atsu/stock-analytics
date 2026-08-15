@@ -89,7 +89,7 @@ def _download_batch(
         actions=True,
         keepna=True,
         repair=False,
-        threads=False,
+        threads=True,
         progress=False,
         timeout=30,
         multi_level_index=True,

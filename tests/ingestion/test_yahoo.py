@@ -61,6 +61,7 @@ def test_download_batch_converts_inclusive_end_date(monkeypatch) -> None:
     assert captured["end"] == "2026-08-11"
     assert captured["auto_adjust"] is False
     assert captured["actions"] is True
+    assert captured["threads"] is True
 
 
 def test_load_latest_yahoo_tickers_uses_latest_jpx_snapshot(tmp_path) -> None:
