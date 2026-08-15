@@ -164,12 +164,24 @@ yfinanceの取得条件は実装内の固定値から開始し、不要なCLIオ
 - 自動テスト25件、Ruff、tyが成功した。
 - 実APIで2024-07-25開示分の43行・111列を取得、検証、一時保存できた。
 
-### Task 4: セクター・市場区分マスター — 未着手
+### Task 4: セクター・市場区分マスター — 完了
 
 - 安定した小規模マスターはdbt seedで管理する。
 - 汎用マスター管理層は作らない。
 
 完了条件: seedの一意性・not nullテストが通ること。
+
+実装・検証結果（2026-08-15）:
+
+- 最小のdbtプロジェクトを`dbt/`へ作成した。
+- `sector_17`、`sector_33`、`market_segments`の3 seedを追加した。
+- コード列はBigQueryで`string`になるよう明示し、先頭ゼロを保持する。
+- コードのunique/not null、名称のnot nullをdata testとして定義した。
+- 33業種の`sector_17_code`から17業種seedへのrelationships testを定義した。
+- J-Quants同梱コード表の英語名称にある末尾空白と明らかな欠字だけを正規化した。
+- dbt 1.12.2で3 seeds、14 data testsをparse・選択できた。
+- CSVは17業種18行、33業種34行、市場区分10行で、一意性・非空・参照整合性を確認した。
+- BigQueryへの`dbt seed`とdata testの実行は、GCP環境構築後に行う。
 
 ### Task 5: JPX現行上場銘柄一覧の取得 — 未着手
 

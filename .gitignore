@@ -17,5 +17,10 @@ wheels/
 # Local ingestion outputs
 data/
 
+# dbt-generated files
+dbt/target/
+dbt/logs/
+dbt/dbt_packages/
+
 # env file
 .env

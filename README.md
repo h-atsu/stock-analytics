@@ -63,3 +63,18 @@ uv run pytest
 uv run ruff check .
 uv run ty check
 ```
+
+## dbtマスターseed
+
+分析で利用する小規模なコードマスターを`dbt/seeds`で管理します。
+
+- JPX 17業種区分
+- JPX 33業種区分と17業種区分の対応
+- JPX市場区分（過去区分を含む）
+
+BigQuery環境とdbt profileの構築後、次のコマンドで投入・検証します。
+
+```bash
+uv run dbt seed --project-dir dbt
+uv run dbt test --project-dir dbt --select resource_type:seed
+```
