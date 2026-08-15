@@ -78,3 +78,34 @@ def test_equity_master_command(monkeypatch, tmp_path: Path) -> None:
     assert result.exit_code == 0
     assert "rows=4378" in result.stdout
     assert f"parquet={artifact.data_path}" in result.stdout
+
+
+def test_financial_summary_command(monkeypatch, tmp_path: Path) -> None:
+    artifact = IngestionArtifact(
+        data_path=tmp_path / "data.parquet",
+        manifest_path=tmp_path / "manifest.json",
+        row_count=43,
+    )
+
+    def fake_ingest(disclosure_date, output_dir):
+        assert disclosure_date.isoformat() == "2024-07-25"
+        assert output_dir == tmp_path
+        return artifact
+
+    monkeypatch.setattr("stock_analytics.cli.ingest_financial_summary", fake_ingest)
+
+    result = runner.invoke(
+        app,
+        [
+            "ingest",
+            "financial-summary",
+            "--date",
+            "2024-07-25",
+            "--output-dir",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "rows=43" in result.stdout
+    assert f"parquet={artifact.data_path}" in result.stdout

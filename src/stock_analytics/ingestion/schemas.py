@@ -5,6 +5,7 @@ from typing import ClassVar
 
 import pandas as pd
 import pandera.pandas as pa
+from jquantsapi.constants import FIN_SUMMARY_COLUMNS_V2
 from pandera.typing import Series
 
 
@@ -105,3 +106,49 @@ def equity_master_model(snapshot_date: date) -> type[EquityMaster]:
 
     EquityMasterForSnapshotDate.__name__ = f"EquityMaster_{snapshot_date:%Y%m%d}"
     return EquityMasterForSnapshotDate
+
+
+class FinancialSummary(pa.DataFrameModel):
+    """J-Quants `/fins/summary` response contract."""
+
+    DiscDate: Series[pd.Timestamp]
+    DiscTime: Series[str]
+    Code: Series[str] = pa.Field(str_matches=r"^[0-9A-Z]{5}$")
+    DiscNo: Series[str]
+    DocType: Series[str]
+    CurPerType: Series[str]
+    CurPerSt: Series[pd.Timestamp]
+    CurPerEn: Series[pd.Timestamp]
+    CurFYSt: Series[pd.Timestamp]
+    CurFYEn: Series[pd.Timestamp]
+    NxtFYSt: Series[pd.Timestamp] = pa.Field(nullable=True)
+    NxtFYEn: Series[pd.Timestamp] = pa.Field(nullable=True)
+
+    @pa.dataframe_check
+    def is_not_empty(cls, frame: pd.DataFrame) -> bool:
+        return not frame.empty
+
+    @pa.dataframe_check
+    def has_all_source_columns(cls, frame: pd.DataFrame) -> bool:
+        return set(FIN_SUMMARY_COLUMNS_V2).issubset(frame.columns)
+
+    class Config:
+        strict = False
+        unique: ClassVar[list[str]] = ["DiscDate", "Code", "DiscNo"]
+        name = "jquants_financial_summary"
+
+
+def financial_summary_model(disclosure_date: date) -> type[FinancialSummary]:
+    """Create a financial-summary contract scoped to the disclosure date."""
+
+    class FinancialSummaryForDisclosureDate(FinancialSummary):
+        @pa.check("DiscDate")
+        def matches_requested_disclosure_date(
+            cls, series: Series[pd.Timestamp]
+        ) -> Series[bool]:
+            return series.dt.date.eq(disclosure_date)
+
+    FinancialSummaryForDisclosureDate.__name__ = (
+        f"FinancialSummary_{disclosure_date:%Y%m%d}"
+    )
+    return FinancialSummaryForDisclosureDate

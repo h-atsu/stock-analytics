@@ -142,13 +142,27 @@ yfinanceの取得条件は実装内の固定値から開始し、不要なCLIオ
 - 自動テスト18件、Ruff、tyが成功した。
 - 実APIで2024-07-25時点の4,378行を取得・検証・一時保存できた。
 
-### Task 3: J-Quants財務サマリー取得 — 未着手
+### Task 3: J-Quants財務サマリー取得 — 完了
 
 - 財務情報を開示日単位で取得する。
 - rawでは欠損を許容し、型と一意性を検証する。
 - ファンダメンタル指標はまだ計算しない。
 
 完了条件: 財務サマリーをParquetへ保存し、fixtureテストが通ること。
+
+実装・検証結果（2026-08-15）:
+
+- V2 `/fins/summary`を開示日単位で取得する。
+- Freeプランで利用可能な日付取得に`get_fin_summary_cursor`をcursorなしで使用し、deprecated APIを避ける。
+- sourceの全111列が存在することを確認する。
+- 識別列と期間列を`FinancialSummary` `DataFrameModel`で型検証する。
+- `(DiscDate, Code, DiscNo)`を一意キーとする。
+- 予想来期期間と財務数値の欠損をrawでは許容する。
+- 財務数値の型変換と指標計算はdbtへ委ねる。
+- `financial_summary/disclosure_date=YYYY-MM-DD/ingested_at=...`へ保存する。
+- CLIは`stock-analytics ingest financial-summary --date YYYY-MM-DD`とする。
+- 自動テスト25件、Ruff、tyが成功した。
+- 実APIで2024-07-25開示分の43行・111列を取得、検証、一時保存できた。
 
 ### Task 4: セクター・市場区分マスター — 未着手
 

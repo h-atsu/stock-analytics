@@ -40,6 +40,22 @@ uv run stock-analytics ingest equity-master \
   --output-dir data/raw/jquants
 ```
 
+## 財務サマリーの取得
+
+指定した開示日のJ-Quants財務サマリーを検証し、日別Parquetとmanifestへ保存します。
+
+```bash
+uv run stock-analytics ingest financial-summary --date 2024-07-25
+```
+
+出力先を変更する場合:
+
+```bash
+uv run stock-analytics ingest financial-summary \
+  --date 2024-07-25 \
+  --output-dir data/raw/jquants
+```
+
 ## 開発時の検証
 
 ```bash

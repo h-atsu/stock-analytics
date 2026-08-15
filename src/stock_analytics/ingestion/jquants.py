@@ -7,11 +7,16 @@ from typing import Protocol
 import jquantsapi
 import pandas as pd
 
-from stock_analytics.ingestion.schemas import daily_bars_model, equity_master_model
+from stock_analytics.ingestion.schemas import (
+    daily_bars_model,
+    equity_master_model,
+    financial_summary_model,
+)
 from stock_analytics.ingestion.storage import (
     IngestionArtifact,
     store_daily_bars,
     store_equity_master,
+    store_financial_summary,
 )
 
 
@@ -27,6 +32,15 @@ class DailyBarsClient(Protocol):
 
 class EquityMasterClient(Protocol):
     def get_eq_master(self, code: str = "", date: str = "") -> pd.DataFrame: ...
+
+
+class FinancialSummaryClient(Protocol):
+    def get_fin_summary_cursor(
+        self,
+        code: str = "",
+        date_yyyymmdd: str = "",
+        cursor: str = "",
+    ) -> tuple[pd.DataFrame, str | None]: ...
 
 
 def fetch_daily_bars(
@@ -74,6 +88,34 @@ def ingest_equity_master(
     return store_equity_master(
         validated,
         snapshot_date,
+        output_root,
+        ingested_at=ingested_at,
+    )
+
+
+def fetch_financial_summary(
+    disclosure_date: date,
+    client: FinancialSummaryClient | None = None,
+) -> pd.DataFrame:
+    api_client = client or jquantsapi.ClientV2()
+    frame, _ = api_client.get_fin_summary_cursor(
+        date_yyyymmdd=disclosure_date.strftime("%Y%m%d")
+    )
+    return frame
+
+
+def ingest_financial_summary(
+    disclosure_date: date,
+    output_root: Path,
+    *,
+    client: FinancialSummaryClient | None = None,
+    ingested_at: datetime | None = None,
+) -> IngestionArtifact:
+    frame = fetch_financial_summary(disclosure_date, client)
+    validated = financial_summary_model(disclosure_date).validate(frame, lazy=True)
+    return store_financial_summary(
+        validated,
+        disclosure_date,
         output_root,
         ingested_at=ingested_at,
     )

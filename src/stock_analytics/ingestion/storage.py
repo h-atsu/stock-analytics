@@ -14,6 +14,8 @@ DATASET_NAME = "equity_daily_bars"
 SOURCE_ENDPOINT = "/equities/bars/daily"
 EQUITY_MASTER_DATASET_NAME = "equity_master"
 EQUITY_MASTER_SOURCE_ENDPOINT = "/equities/master"
+FINANCIAL_SUMMARY_DATASET_NAME = "financial_summary"
+FINANCIAL_SUMMARY_SOURCE_ENDPOINT = "/fins/summary"
 SCHEMA_VERSION = 1
 
 
@@ -75,6 +77,7 @@ def _store_date_partition(
     dataset_name: str,
     source_endpoint: str,
     partition_name: str,
+    date_column: str,
     ingested_at: datetime | None = None,
 ) -> IngestionArtifact:
     timestamp = ingested_at or datetime.now(UTC)
@@ -92,7 +95,7 @@ def _store_date_partition(
     output_dir.mkdir(parents=True, exist_ok=False)
 
     stored_frame = frame.copy()
-    stored_frame["Date"] = pd.to_datetime(stored_frame["Date"]).dt.date
+    stored_frame[date_column] = pd.to_datetime(stored_frame[date_column]).dt.date
     stored_frame["_ingested_at"] = timestamp
     stored_frame["_source"] = source_endpoint
 
@@ -132,6 +135,7 @@ def store_daily_bars(
         dataset_name=DATASET_NAME,
         source_endpoint=SOURCE_ENDPOINT,
         partition_name="trade_date",
+        date_column="Date",
         ingested_at=ingested_at,
     )
 
@@ -150,5 +154,25 @@ def store_equity_master(
         dataset_name=EQUITY_MASTER_DATASET_NAME,
         source_endpoint=EQUITY_MASTER_SOURCE_ENDPOINT,
         partition_name="snapshot_date",
+        date_column="Date",
+        ingested_at=ingested_at,
+    )
+
+
+def store_financial_summary(
+    frame: pd.DataFrame,
+    disclosure_date: date,
+    output_root: Path,
+    *,
+    ingested_at: datetime | None = None,
+) -> IngestionArtifact:
+    return _store_date_partition(
+        frame,
+        disclosure_date,
+        output_root,
+        dataset_name=FINANCIAL_SUMMARY_DATASET_NAME,
+        source_endpoint=FINANCIAL_SUMMARY_SOURCE_ENDPOINT,
+        partition_name="disclosure_date",
+        date_column="DiscDate",
         ingested_at=ingested_at,
     )

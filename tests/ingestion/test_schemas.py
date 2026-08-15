@@ -3,8 +3,13 @@ from datetime import date
 import pandas as pd
 import pandera.pandas as pa
 import pytest
+from jquantsapi.constants import FIN_SUMMARY_COLUMNS_V2
 
-from stock_analytics.ingestion.schemas import daily_bars_model, equity_master_model
+from stock_analytics.ingestion.schemas import (
+    daily_bars_model,
+    equity_master_model,
+    financial_summary_model,
+)
 
 
 def valid_daily_bars() -> pd.DataFrame:
@@ -50,6 +55,32 @@ def valid_equity_master() -> pd.DataFrame:
             "MrgnNm": ["信用", "貸借"],
         }
     )
+
+
+def valid_financial_summary() -> pd.DataFrame:
+    frame = pd.DataFrame(
+        {
+            column: pd.Series([None, None], dtype=object)
+            for column in FIN_SUMMARY_COLUMNS_V2
+        }
+    )
+    frame["DiscDate"] = pd.to_datetime(["2024-07-25", "2024-07-25"])
+    frame["DiscTime"] = ["15:00", "15:30"]
+    frame["Code"] = ["13010", "130A0"]
+    frame["DiscNo"] = ["20240725555555", "20240725666666"]
+    frame["DocType"] = [
+        "FYFinancialStatements_Consolidated_JP",
+        "1QFinancialStatements_Consolidated_JP",
+    ]
+    frame["CurPerType"] = ["FY", "1Q"]
+    frame["CurPerSt"] = pd.to_datetime(["2023-04-01", "2024-04-01"])
+    frame["CurPerEn"] = pd.to_datetime(["2024-03-31", "2024-06-30"])
+    frame["CurFYSt"] = pd.to_datetime(["2023-04-01", "2024-04-01"])
+    frame["CurFYEn"] = pd.to_datetime(["2024-03-31", "2025-03-31"])
+    frame["NxtFYSt"] = pd.to_datetime([None, "2025-04-01"])
+    frame["NxtFYEn"] = pd.to_datetime([None, "2026-03-31"])
+    frame["Sales"] = [1_000_000, None]
+    return frame
 
 
 def test_daily_bars_model_accepts_nullable_no_trade_row() -> None:
@@ -129,3 +160,40 @@ def test_equity_master_model_rejects_duplicate_date_and_code() -> None:
 
     with pytest.raises(pa.errors.SchemaErrors, match="multiple_fields_uniqueness"):
         equity_master_model(date(2024, 7, 25)).validate(frame, lazy=True)
+
+
+def test_financial_summary_model_accepts_nullable_financial_values() -> None:
+    validated = financial_summary_model(date(2024, 7, 25)).validate(
+        valid_financial_summary(), lazy=True
+    )
+
+    assert len(validated) == 2
+    assert validated["Sales"].iloc[0] == 1_000_000
+    assert pd.isna(validated["Sales"].iloc[1])
+
+
+@pytest.mark.parametrize(
+    ("mutate", "expected"),
+    [
+        (
+            lambda frame: frame.assign(DiscDate=pd.Timestamp("2024-07-24")),
+            "matches_requested_disclosure_date",
+        ),
+        (
+            lambda frame: frame.drop(columns="Sales"),
+            "has_all_source_columns",
+        ),
+    ],
+)
+def test_financial_summary_model_rejects_invalid_data(mutate, expected: str) -> None:
+    with pytest.raises(pa.errors.SchemaErrors, match=expected):
+        financial_summary_model(date(2024, 7, 25)).validate(
+            mutate(valid_financial_summary()), lazy=True
+        )
+
+
+def test_financial_summary_model_rejects_duplicate_disclosure() -> None:
+    frame = valid_financial_summary().iloc[[0, 0]].reset_index(drop=True)
+
+    with pytest.raises(pa.errors.SchemaErrors, match="multiple_fields_uniqueness"):
+        financial_summary_model(date(2024, 7, 25)).validate(frame, lazy=True)
