@@ -1,0 +1,8 @@
+.env
+.env.*
+.venv
+.git
+data
+notebooks
+__pycache__
+*.py[cod]

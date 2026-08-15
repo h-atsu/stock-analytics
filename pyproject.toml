@@ -1,0 +1,39 @@
+[project]
+name = "stock-analytics"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "h-atsu", email = "jhuim08@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "dbt-bigquery>=1.12.0",
+    "dbt-core>=1.12.2",
+    "jquants-api-client>=2.4.0",
+    "pandera[pandas,polars]>=0.32.1",
+    "plotly>=6.9.0",
+    "polars>=1.43.2",
+    "pyarrow>=25.0.1",
+    "python-dotenv>=1.2.2",
+    "typer>=0.27.1",
+]
+
+[project.scripts]
+stock-analytics = "stock_analytics:main"
+
+[build-system]
+requires = ["uv_build>=0.11.19,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.3.0",
+    "nbformat>=5.11.0",
+    "pytest>=9.1.1",
+    "ruff>=0.16.3",
+    "ty>=0.0.72",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
