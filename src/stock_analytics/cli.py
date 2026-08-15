@@ -9,6 +9,7 @@ import pandera.pandas as pa
 import typer
 from dotenv import load_dotenv
 
+from stock_analytics.bootstrap import bootstrap_raw
 from stock_analytics.ingestion.jpx import ingest_listed_issues
 from stock_analytics.ingestion.jquants import (
     ingest_daily_bars,
@@ -20,16 +21,21 @@ from stock_analytics.ingestion.yahoo import (
     ingest_yahoo_daily_bars,
     load_latest_yahoo_tickers,
 )
-from stock_analytics.publishing.bigquery import load_raw_daily_bars
+from stock_analytics.publishing.bigquery import (
+    load_all_raw_artifacts,
+    load_raw_daily_bars,
+)
 from stock_analytics.publishing.gcs import publish_raw_artifacts
 
 app = typer.Typer(no_args_is_help=True, help="Stock analytics data pipeline.")
 ingest_app = typer.Typer(no_args_is_help=True, help="Ingest source data.")
 publish_app = typer.Typer(no_args_is_help=True, help="Publish validated data.")
 load_app = typer.Typer(no_args_is_help=True, help="Load published data.")
+bootstrap_app = typer.Typer(no_args_is_help=True, help="Bootstrap initial data.")
 app.add_typer(ingest_app, name="ingest")
 app.add_typer(publish_app, name="publish")
 app.add_typer(load_app, name="load")
+app.add_typer(bootstrap_app, name="bootstrap")
 
 
 def _parse_iso_date(value: str) -> date:
@@ -70,6 +76,10 @@ def daily_bars(
         typer.echo(f"取り込みに失敗しました: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
+    if artifact is None:
+        typer.echo("no_data=true")
+        return
+
     typer.echo(f"rows={artifact.row_count}")
     typer.echo(f"parquet={artifact.data_path}")
     typer.echo(f"manifest={artifact.manifest_path}")
@@ -103,6 +113,10 @@ def equity_master(
     except Exception as exc:
         typer.echo(f"取り込みに失敗しました: {exc}", err=True)
         raise typer.Exit(code=1) from exc
+
+    if artifact is None:
+        typer.echo("no_data=true")
+        return
 
     typer.echo(f"rows={artifact.row_count}")
     typer.echo(f"parquet={artifact.data_path}")
@@ -138,6 +152,10 @@ def financial_summary(
         typer.echo(f"取り込みに失敗しました: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
+    if artifact is None:
+        typer.echo("no_data=true")
+        return
+
     typer.echo(f"rows={artifact.row_count}")
     typer.echo(f"parquet={artifact.data_path}")
     typer.echo(f"manifest={artifact.manifest_path}")
@@ -171,6 +189,10 @@ def earnings_date(
     except Exception as exc:
         typer.echo(f"取り込みに失敗しました: {exc}", err=True)
         raise typer.Exit(code=1) from exc
+
+    if artifact is None:
+        typer.echo("no_data=true")
+        return
 
     typer.echo(f"rows={artifact.row_count}")
     typer.echo(f"parquet={artifact.data_path}")
@@ -315,3 +337,104 @@ def load_daily_bars(
 
     typer.echo(f"loaded_partitions={result.loaded_partition_count}")
     typer.echo(f"loaded_rows={result.loaded_row_count}")
+
+
+@load_app.command("raw")
+def load_raw(
+    bucket: Annotated[
+        str,
+        typer.Option("--bucket", help="raw artifactのGCS bucket名。"),
+    ],
+    project: Annotated[
+        str,
+        typer.Option("--project", help="BigQueryのGCP project ID。"),
+    ],
+    dataset: Annotated[
+        str,
+        typer.Option("--dataset", help="BigQuery dataset ID。"),
+    ] = "stock_analytics",
+) -> None:
+    """対応済みの全raw artifactをBigQueryへloadする。"""
+    try:
+        result = load_all_raw_artifacts(bucket, project, dataset)
+    except Exception as exc:
+        typer.echo(f"BigQuery loadに失敗しました: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(f"loaded_partitions={result.loaded_partition_count}")
+    typer.echo(f"loaded_rows={result.loaded_row_count}")
+
+
+@bootstrap_app.command("raw")
+def run_bootstrap_raw(
+    as_of: Annotated[
+        str,
+        typer.Option("--as-of", help="bootstrap基準日（YYYY-MM-DD）。"),
+    ],
+    project: Annotated[
+        str,
+        typer.Option("--project", help="GCP project ID。"),
+    ],
+    bucket: Annotated[
+        str,
+        typer.Option("--bucket", help="raw artifactのGCS bucket名。"),
+    ],
+    output_dir: Annotated[
+        Path,
+        typer.Option(
+            "--output-dir",
+            help="local rawデータのルート。",
+            file_okay=False,
+            dir_okay=True,
+        ),
+    ] = Path("data/raw"),
+    dataset: Annotated[
+        str,
+        typer.Option("--dataset", help="BigQuery dataset ID。"),
+    ] = "stock_analytics",
+    jquants_start_date: Annotated[
+        str | None,
+        typer.Option(
+            "--jquants-start-date",
+            help="J-Quants開始日の上書き（小期間の動作確認用）。",
+        ),
+    ] = None,
+    yahoo_start_date: Annotated[
+        str | None,
+        typer.Option(
+            "--yahoo-start-date",
+            help="Yahoo開始日の上書き（小期間の動作確認用）。",
+        ),
+    ] = None,
+) -> None:
+    """rawデータをlocal取得し、GCSとBigQueryまで初期構築する。"""
+    load_dotenv()
+    parsed_as_of = _parse_iso_date(as_of)
+    parsed_jquants_start = (
+        _parse_iso_date(jquants_start_date) if jquants_start_date is not None else None
+    )
+    parsed_yahoo_start = (
+        _parse_iso_date(yahoo_start_date) if yahoo_start_date is not None else None
+    )
+    try:
+        result = bootstrap_raw(
+            parsed_as_of,
+            project,
+            bucket,
+            output_dir,
+            dataset,
+            jquants_start_date=parsed_jquants_start,
+            yahoo_start_date=parsed_yahoo_start,
+            progress=typer.echo,
+        )
+    except Exception as exc:
+        typer.echo(f"bootstrapに失敗しました: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(f"fetched_artifacts={result.fetched_artifact_count}")
+    typer.echo(f"skipped_partitions={result.skipped_partition_count}")
+    typer.echo(f"no_data={result.no_data_count}")
+    typer.echo(f"yahoo_rows={result.yahoo_row_count}")
+    typer.echo(f"uploaded_files={result.publish_result.uploaded_count}")
+    typer.echo(f"loaded_partitions={result.load_result.loaded_partition_count}")
+    typer.echo(f"loaded_rows={result.load_result.loaded_row_count}")

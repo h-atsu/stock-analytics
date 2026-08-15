@@ -2,6 +2,7 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
+from stock_analytics.bootstrap import BootstrapResult
 from stock_analytics.cli import app
 from stock_analytics.ingestion.storage import IngestionArtifact, ListedIssuesArtifact
 from stock_analytics.ingestion.yahoo import YahooIngestionResult
@@ -281,3 +282,86 @@ def test_load_daily_bars_command(monkeypatch) -> None:
     assert result.exit_code == 0
     assert "loaded_partitions=2" in result.stdout
     assert "loaded_rows=20" in result.stdout
+
+
+def test_load_raw_command(monkeypatch) -> None:
+    def fake_load(
+        bucket_name: str,
+        project_id: str,
+        dataset_id: str,
+    ) -> BigQueryLoadResult:
+        assert bucket_name == "raw-bucket"
+        assert project_id == "test-project"
+        assert dataset_id == "stock_analytics"
+        return BigQueryLoadResult(loaded_partition_count=8, loaded_row_count=80)
+
+    monkeypatch.setattr("stock_analytics.cli.load_all_raw_artifacts", fake_load)
+
+    result = runner.invoke(
+        app,
+        [
+            "load",
+            "raw",
+            "--bucket",
+            "raw-bucket",
+            "--project",
+            "test-project",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "loaded_partitions=8" in result.stdout
+    assert "loaded_rows=80" in result.stdout
+
+
+def test_bootstrap_raw_command(monkeypatch, tmp_path: Path) -> None:
+    def fake_bootstrap(
+        as_of,
+        project_id,
+        bucket_name,
+        output_root,
+        dataset_id,
+        **kwargs,
+    ) -> BootstrapResult:
+        assert as_of.isoformat() == "2026-08-16"
+        assert project_id == "test-project"
+        assert bucket_name == "raw-bucket"
+        assert output_root == tmp_path
+        assert dataset_id == "stock_analytics"
+        assert kwargs["jquants_start_date"].isoformat() == "2026-05-22"
+        assert kwargs["yahoo_start_date"].isoformat() == "2026-08-01"
+        return BootstrapResult(
+            fetched_artifact_count=7,
+            skipped_partition_count=3,
+            no_data_count=2,
+            yahoo_row_count=100,
+            publish_result=GcsPublishResult(10, 4),
+            load_result=BigQueryLoadResult(6, 200),
+        )
+
+    monkeypatch.setattr("stock_analytics.cli.bootstrap_raw", fake_bootstrap)
+
+    result = runner.invoke(
+        app,
+        [
+            "bootstrap",
+            "raw",
+            "--as-of",
+            "2026-08-16",
+            "--project",
+            "test-project",
+            "--bucket",
+            "raw-bucket",
+            "--output-dir",
+            str(tmp_path),
+            "--jquants-start-date",
+            "2026-05-22",
+            "--yahoo-start-date",
+            "2026-08-01",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "fetched_artifacts=7" in result.stdout
+    assert "yahoo_rows=100" in result.stdout
+    assert "loaded_rows=200" in result.stdout

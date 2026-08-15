@@ -1,6 +1,6 @@
 # 東証株価分析基盤 実装計画
 
-最終更新日: 2026-08-15
+最終更新日: 2026-08-16
 
 ## 進め方
 
@@ -12,7 +12,7 @@
 
 ## アーキテクチャ
 
-J-Quantsを最終的な正本、Yahoo Financeを直近期間の暫定データとして扱う。
+J-Quantsを最終的な正本、Yahoo Financeを取得可能な5年価格履歴と直近期間の暫定データとして扱う。
 
 ```text
 J-Quants ─────── raw_jquants ─┐
@@ -43,7 +43,7 @@ stock-analytics ingest yahoo-daily-bars --start-date YYYY-MM-DD --end-date YYYY-
 stock-analytics ingest equity-master --date YYYY-MM-DD
 stock-analytics ingest financial-summary --date YYYY-MM-DD
 stock-analytics ingest earnings-date --date YYYY-MM-DD
-stock-analytics backfill --start-date YYYY-MM-DD --end-date YYYY-MM-DD
+stock-analytics bootstrap raw --as-of YYYY-MM-DD --project PROJECT --bucket BUCKET
 stock-analytics pipeline daily --as-of YYYY-MM-DD
 ```
 
@@ -56,7 +56,7 @@ yfinanceの取得条件は実装内の固定値から開始し、不要なCLIオ
 - 100 ticker単位で逐次取得
 - 一時エラーは2秒、4秒、8秒で最大3回リトライ
 - 日次処理は直近7暦日をローリング再取得
-- 初回はJ-Quantsと同じ約2年分を取得
+- 初回はYahoo Financeを5年分取得
 - `end`は排他的として扱う
 
 ## 現在のデータ契約
@@ -314,7 +314,7 @@ yfinanceの取得条件は実装内の固定値から開始し、不要なCLIオ
 - raw objectは`ingested_at`付きのimmutable pathに保存するため、bucket versioningと自動削除は現時点で追加しない。
 - raw GCS追加後のoffline Terraform planは合計6 resources add、0 change、0 destroyで成功した。
 
-### Task 10: GCS publishとBigQuery load — 着手（日足loadまで実装済み）
+### Task 10: GCS publishとBigQuery load — 実装済み（全raw load確認待ち）
 
 - 検証済みParquetだけをGCSへuploadする。
 - rawテーブルは`trade_date` partition、`security_code` clusterとする。
@@ -339,6 +339,9 @@ yfinanceの取得条件は実装内の固定値から開始し、不要なCLIオ
 - 同一日付の複数ingestはrawに保持し、Task 11のdbt stagingで`_ingested_at`が最新の行を採用する。
 - `stock-analytics load daily-bars --project ... --bucket ...`を追加した。
 - BigQuery loadの自動テスト2件とCLIテスト1件が成功した。実datasetへのloadは未実施。
+- 銘柄マスター、財務サマリー、決算予定、JPX一覧、Yahoo coverageのrawテーブルloadを追加した。
+- `stock-analytics load raw`で現在対応する全raw artifactをloadできる。
+- 初回の`load raw`は日付ごとに数千のload jobを作らず、7 rawテーブルをそれぞれ1 jobで全置換する。日次用の`load daily-bars`はpartition置換を維持する。
 
 ### Task 11: dbt staging — 未着手
 
@@ -370,14 +373,24 @@ yfinanceの取得条件は実装内の固定値から開始し、不要なCLIオ
 
 完了条件: 分析側がsource固有列を意識せず日足を参照できること。
 
-### Task 14: 初回バックフィル — 未着手
+### Task 14: 初回bootstrap — 実装済み（全期間実行待ち）
 
-- J-QuantsとYahooを約2年分取得する。
+- J-Quantsは12週遅れの利用可能終端から2年分、Yahooは基準日まで5年分取得する。
 - JPX現行一覧、銘柄マスター、財務サマリー、決算予定履歴も取得する。
 - 成功済み日次ファイルをskipして中断後に再開可能にする。
 - checkpoint管理基盤は作らない。
 
 完了条件: 再実行可能で、J-QuantsとYahooの重複比較を確認できること。
+
+実装・検証結果（2026-08-16、途中）:
+
+- `stock-analytics bootstrap raw --as-of ... --project ... --bucket ...`を追加した。
+- JPX一覧、J-Quantsマスター・日足・財務・決算予定、Yahoo日足をlocalへ取得した後、GCS publishと全rawテーブルのBigQuery loadを直列実行する。
+- J-Quantsは平日を走査し、APIの空レスポンスを正常な`no_data`として扱う。
+- J-Quantsのレート制限対策としてリクエスト間隔を2秒とし、429時は60秒、120秒、240秒で再試行する。
+- localに正常なmanifestがあるJ-Quants partitionと、同一期間のYahoo coverage runは取得をskipする。
+- 小期間の一巡確認用にJ-QuantsとYahooの開始日だけ上書き可能とした。
+- 固定日付を使ったbootstrap、skip、日付範囲の自動テストが成功した。実データの全期間bootstrapは未実施。
 
 ### Task 15: 日次パイプライン — 未着手
 

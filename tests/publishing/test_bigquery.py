@@ -2,7 +2,10 @@ from dataclasses import dataclass
 
 from google.cloud import bigquery
 
-from stock_analytics.publishing.bigquery import load_raw_daily_bars
+from stock_analytics.publishing.bigquery import (
+    load_all_raw_artifacts,
+    load_raw_daily_bars,
+)
 
 
 @dataclass(frozen=True)
@@ -103,3 +106,34 @@ def test_load_raw_daily_bars_ignores_parquet_without_manifest() -> None:
     assert result.loaded_partition_count == 0
     assert result.loaded_row_count == 0
     assert bigquery_client.loads == []
+
+
+def test_load_all_raw_artifacts_loads_reference_tables() -> None:
+    storage_client = FakeStorageClient(
+        [
+            "jquants/equity_master/snapshot_date=2026-05-22/ingested_at=run/manifest.json",
+            "jquants/financial_summary/disclosure_date=2026-05-22/ingested_at=run/manifest.json",
+            "jquants/earnings_date/publication_date=2026-05-22/ingested_at=run/manifest.json",
+            "jpx/listed_issues/snapshot_date=2026-07-31/ingested_at=run/manifest.json",
+            "yfinance/equity_daily_bars_coverage/start_date=2021-08-16/end_date=2026-08-16/ingested_at=run/manifest.json",
+        ]
+    )
+    bigquery_client = FakeBigQueryClient()
+
+    result = load_all_raw_artifacts(
+        "raw-bucket",
+        "test-project",
+        storage_client=storage_client,
+        bigquery_client=bigquery_client,
+    )
+
+    assert result.loaded_partition_count == 5
+    assert result.loaded_row_count == 50
+    destinations = [destination for _, destination, _ in bigquery_client.loads]
+    assert destinations == [
+        "test-project.stock_analytics.raw_jquants_equity_master",
+        "test-project.stock_analytics.raw_jquants_financial_summary",
+        "test-project.stock_analytics.raw_jquants_earnings_date",
+        "test-project.stock_analytics.raw_jpx_listed_issues",
+        "test-project.stock_analytics.raw_yahoo_equity_daily_bars_coverage",
+    ]

@@ -127,7 +127,7 @@ uv run stock-analytics publish raw \
   --source-dir data/raw
 ```
 
-## 日足rawデータのBigQuery load
+## rawデータのBigQuery load
 
 GCSへpublish済みのJ-Quants・Yahoo Finance日足を、日付partition単位でBigQueryへloadします。同じ日付の再実行はpartitionを置き換えるため、loadによる重複は発生しません。
 
@@ -141,6 +141,40 @@ uv run stock-analytics load daily-bars \
 
 - `raw_jquants_equity_daily_bars`（`Date` partition、`Code` cluster）
 - `raw_yahoo_equity_daily_bars`（`trade_date` partition、`yahoo_ticker` cluster）
+
+マスター、財務、決算予定、coverageを含む全raw artifactをloadする場合は、各テーブルを全置換します。初回bootstrap向けの処理です。
+
+```bash
+uv run stock-analytics load raw \
+  --project YOUR_GCP_PROJECT_ID \
+  --bucket YOUR_GCP_PROJECT_ID-stock-analytics-raw
+```
+
+## 初回bootstrap
+
+localへの取得、GCS publish、BigQuery loadを順番に実行します。デフォルトでは、基準日の12週前を終端とするJ-Quants 2年分と、基準日までのYahoo Finance 5年分を取得します。
+
+まず小期間で一巡確認します。
+
+```bash
+uv run stock-analytics bootstrap raw \
+  --as-of 2026-08-16 \
+  --project stock-analytics-505614 \
+  --bucket stock-analytics-505614-stock-analytics-raw \
+  --jquants-start-date 2026-05-18 \
+  --yahoo-start-date 2026-08-10
+```
+
+確認後、開始日の上書きを外して全期間を実行します。
+
+```bash
+uv run stock-analytics bootstrap raw \
+  --as-of 2026-08-16 \
+  --project stock-analytics-505614 \
+  --bucket stock-analytics-505614-stock-analytics-raw
+```
+
+正常なmanifestがあるJ-Quants partitionと、同一期間のYahoo coverageがあるrunはスキップします。途中で失敗した場合は、同じコマンドを再実行してください。休場日や開示データがない日は`no_data`として扱います。J-Quantsはリクエストごとに2秒間隔を空け、429応答時は60秒、120秒、240秒の順に待機して再試行します。
 
 ## Docker実行
 

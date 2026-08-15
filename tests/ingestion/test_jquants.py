@@ -1,6 +1,7 @@
 from datetime import UTC, date, datetime
 
 import pandas as pd
+import pytest
 
 from stock_analytics.ingestion.jquants import (
     ingest_daily_bars,
@@ -82,6 +83,7 @@ def test_ingest_daily_bars_fetches_validates_and_stores(tmp_path) -> None:
         ingested_at=datetime(2026, 8, 15, 12, 0, tzinfo=UTC),
     )
 
+    assert artifact is not None
     assert client.requested_date == "20240725"
     assert artifact.row_count == 2
     assert artifact.data_path.is_file()
@@ -98,6 +100,7 @@ def test_ingest_equity_master_fetches_validates_and_stores(tmp_path) -> None:
         ingested_at=datetime(2026, 8, 15, 12, 0, tzinfo=UTC),
     )
 
+    assert artifact is not None
     assert client.requested_date == "20240725"
     assert artifact.row_count == 2
     assert artifact.data_path.is_file()
@@ -114,6 +117,7 @@ def test_ingest_financial_summary_fetches_validates_and_stores(tmp_path) -> None
         ingested_at=datetime(2026, 8, 15, 12, 0, tzinfo=UTC),
     )
 
+    assert artifact is not None
     assert client.requested_date == "20240725"
     assert artifact.row_count == 2
     assert artifact.data_path.is_file()
@@ -130,7 +134,31 @@ def test_ingest_earnings_date_fetches_validates_and_stores(tmp_path) -> None:
         ingested_at=datetime(2026, 8, 15, 12, 0, tzinfo=UTC),
     )
 
+    assert artifact is not None
     assert client.requested_date == "20240725"
     assert artifact.row_count == 2
     assert artifact.data_path.is_file()
     assert artifact.manifest_path.is_file()
+
+
+@pytest.mark.parametrize(
+    ("ingest", "client"),
+    [
+        (ingest_daily_bars, FakeDailyBarsClient(pd.DataFrame())),
+        (ingest_equity_master, FakeEquityMasterClient(pd.DataFrame())),
+        (ingest_financial_summary, FakeFinancialSummaryClient(pd.DataFrame())),
+        (ingest_earnings_date, FakeEarningsDateClient(pd.DataFrame())),
+    ],
+)
+def test_jquants_ingestion_treats_empty_response_as_no_data(
+    ingest, client, tmp_path
+) -> None:
+    artifact = ingest(
+        date(2024, 7, 27),
+        tmp_path,
+        client=client,
+        ingested_at=datetime(2026, 8, 15, 12, 0, tzinfo=UTC),
+    )
+
+    assert artifact is None
+    assert list(tmp_path.rglob("*")) == []

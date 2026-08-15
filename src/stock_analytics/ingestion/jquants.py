@@ -68,8 +68,10 @@ def ingest_daily_bars(
     *,
     client: DailyBarsClient | None = None,
     ingested_at: datetime | None = None,
-) -> IngestionArtifact:
+) -> IngestionArtifact | None:
     frame = fetch_daily_bars(trade_date, client)
+    if frame.empty:
+        return None
     validated = daily_bars_model(trade_date).validate(frame, lazy=True)
     return store_daily_bars(
         validated,
@@ -93,8 +95,10 @@ def ingest_equity_master(
     *,
     client: EquityMasterClient | None = None,
     ingested_at: datetime | None = None,
-) -> IngestionArtifact:
+) -> IngestionArtifact | None:
     frame = fetch_equity_master(snapshot_date, client)
+    if frame.empty:
+        return None
     validated = equity_master_model(snapshot_date).validate(frame, lazy=True)
     return store_equity_master(
         validated,
@@ -121,8 +125,10 @@ def ingest_financial_summary(
     *,
     client: FinancialSummaryClient | None = None,
     ingested_at: datetime | None = None,
-) -> IngestionArtifact:
+) -> IngestionArtifact | None:
     frame = fetch_financial_summary(disclosure_date, client)
+    if frame.empty:
+        return None
     validated = financial_summary_model(disclosure_date).validate(frame, lazy=True)
     return store_financial_summary(
         validated,
@@ -148,8 +154,10 @@ def ingest_earnings_date(
     *,
     client: EarningsDateClient | None = None,
     ingested_at: datetime | None = None,
-) -> IngestionArtifact:
+) -> IngestionArtifact | None:
     frame = fetch_earnings_date(publication_date, client)
+    if frame.empty:
+        return None
     validated = earnings_date_model(publication_date).validate(frame, lazy=True)
     return store_earnings_date(
         validated,
