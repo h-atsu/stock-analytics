@@ -22,5 +22,13 @@ dbt/target/
 dbt/logs/
 dbt/dbt_packages/
 
-# env file
-.env
+# Terraform local files
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+infra/terraform.tfvars
+infra/**/backend.tf
+infra/**/terraform.tfvars

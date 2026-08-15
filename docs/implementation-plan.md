@@ -275,21 +275,40 @@ yfinanceの取得条件は実装内の固定値から開始し、不要なCLIオ
 - 最終イメージで`7203.T`の2026-08-10から2026-08-14を実取得し、4行の日足を4個の日別Parquetとcoverageへ保存できた。
 - devcontainerは追加していない。
 
-### Task 8: Terraform bootstrap — 未着手
+### Task 8: Terraform bootstrap — 実装済み（apply待ち）
 
-- Terraform state用GCS bucketとArtifact Registryを作る。
+- Terraform state用GCS bucketは初回だけ手動作成し、Artifact RegistryをTerraformで作る。
 - dev単一環境、手動apply、手動イメージpushから始める。
 
 完了条件: 空のGCPプロジェクトから`terraform init/plan/apply`を再現できること。
 
-### Task 9: データ基盤Terraform — 未着手
+実装・検証結果（2026-08-16）:
+
+- dev/prod directory、workspace、共通moduleは作らず、`infra/`直下の単一root moduleとした。
+- Terraform state用GCS bucketはbootstrap前提としてgcloudで一度だけ手動作成し、Terraform管理対象外とした。
+- state bucketはversioning、uniform bucket-level access、public access prevention、7日間のsoft deleteを有効にする。
+- Terraform 1.15.xとGoogle provider 7.41.xを指定し、Artifact Registry APIとDocker用repositoryを定義した。
+- GCS backendの`stock-analytics` prefixで1つのstateを使用する。
+- `terraform.tfvars`、local state、plan fileはGit管理対象外にした。
+- GCS backend接続を除くoffline検証で`terraform validate`とダミーprojectへの`terraform plan -refresh=false`が成功し、2 resources add、0 change、0 destroyを確認した。
+- gcloudの既定projectが未設定のため、state bucket作成、GCS backend初期化、実プロジェクトへのplan/applyは未実施。
+
+### Task 9: データ基盤Terraform — 着手（BigQuery dataset実装済み）
 
 - raw用GCS bucketを作る。
-- BigQuery datasetsとして`raw_jquants`、`raw_yfinance`、`raw_jpx`、`staging`、`intermediate`、`marts`を作る。
+- BigQueryは`stock_analytics`単一datasetから始め、raw・staging・intermediate・martsはテーブル名で区別する。
 - Secret Manager、service account、最小権限IAM、Cloud Run Job、Cloud Schedulerを作る。
 - ローカルは`.env`、Cloud RunはSecret Managerを利用する。
 
 完了条件: secret値がstateやコードに含まれず、IAMが必要最小限であること。
+
+実装・検証結果（2026-08-16、途中）:
+
+- BigQuery APIとTokyoリージョン（`asia-northeast1`）の`stock_analytics` datasetをTerraformに追加した。
+- datasetはraw tableとdbt modelで共用し、`raw_`、`stg_`、`int_`、`dim_`、`fct_`の命名でレイヤーを区別する。
+- `delete_contents_on_destroy=false`とし、テーブルがあるdatasetの誤削除を防止する。
+- dbt用service accountとdataset IAMはCloud Run Jobの実行主体と合わせて後続実装する。
+- GCS backend接続を除くoffline検証で`terraform validate`と`terraform plan -refresh=false`が成功し、Task 8分を含め4 resources add、0 change、0 destroyを確認した。
 
 ### Task 10: GCS publishとBigQuery load — 未着手
 

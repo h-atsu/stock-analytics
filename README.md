@@ -129,6 +129,10 @@ docker run --rm \
   ingest daily-bars --date 2024-07-25
 ```
 
+## GCPインフラ
+
+Terraform構成は`infra/`直下で管理します。初回のstate bucket作成とGCS backendへの移行手順は[`infra/README.md`](infra/README.md)を参照してください。
+
 ## 開発時の検証
 
 ```bash
