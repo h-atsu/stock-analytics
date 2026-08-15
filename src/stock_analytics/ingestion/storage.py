@@ -299,3 +299,68 @@ def store_jpx_listed_issues(
         manifest_path=manifest_path,
         row_count=len(stored_frame),
     )
+
+
+def store_yahoo_daily_bars(
+    frame: pd.DataFrame,
+    trade_date: date,
+    output_root: Path,
+    *,
+    ingested_at: datetime,
+) -> IngestionArtifact:
+    return _store_date_partition(
+        frame,
+        trade_date,
+        output_root,
+        dataset_name="equity_daily_bars",
+        source_endpoint="yfinance.download",
+        partition_name="trade_date",
+        date_column="trade_date",
+        ingested_at=ingested_at,
+    )
+
+
+def store_yahoo_coverage(
+    frame: pd.DataFrame,
+    start_date: date,
+    end_date: date,
+    output_root: Path,
+    *,
+    ingested_at: datetime,
+) -> IngestionArtifact:
+    timestamp = ingested_at.astimezone(UTC)
+    run_partition = timestamp.strftime("%Y%m%dT%H%M%S.%fZ")
+    output_dir = (
+        output_root
+        / "equity_daily_bars_coverage"
+        / f"start_date={start_date.isoformat()}"
+        / f"end_date={end_date.isoformat()}"
+        / f"ingested_at={run_partition}"
+    )
+    output_dir.mkdir(parents=True, exist_ok=False)
+
+    stored_frame = frame.copy()
+    stored_frame["start_date"] = pd.to_datetime(stored_frame["start_date"]).dt.date
+    stored_frame["end_date"] = pd.to_datetime(stored_frame["end_date"]).dt.date
+    stored_frame["_ingested_at"] = timestamp
+    stored_frame["_source"] = "yfinance.download"
+
+    data_path = output_dir / "data.parquet"
+    manifest_path = output_dir / "manifest.json"
+    _write_parquet_atomically(stored_frame, data_path)
+    manifest: dict[str, object] = {
+        "dataset": "equity_daily_bars_coverage",
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
+        "ingested_at": timestamp.isoformat().replace("+00:00", "Z"),
+        "row_count": len(stored_frame),
+        "source": "yfinance.download",
+        "schema_version": SCHEMA_VERSION,
+        "sha256": _sha256(data_path),
+    }
+    _write_json_atomically(manifest, manifest_path)
+    return IngestionArtifact(
+        data_path=data_path,
+        manifest_path=manifest_path,
+        row_count=len(stored_frame),
+    )

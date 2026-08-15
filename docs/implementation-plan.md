@@ -227,7 +227,7 @@ yfinanceの取得条件は実装内の固定値から開始し、不要なCLIオ
 - 自動テスト40件、Ruff、format、ty、dbt parseが成功した。
 - 実データで2026-07-31時点の4,444銘柄を保存し、同一ファイルの再取得がskipされることを確認した。
 
-### Task 6: yfinance日足・コーポレートアクション取得 — 未着手
+### Task 6: yfinance日足・コーポレートアクション取得 — 完了
 
 - JPX一覧のYahoo ticker候補がある銘柄を対象に、100 ticker単位で日足、配当、株式分割を取得する。
 - raw OHLC、volume、`Adj Close`、dividend、stock splitを日付別Parquetへ保存する。
@@ -236,6 +236,23 @@ yfinanceの取得条件は実装内の固定値から開始し、不要なCLIオ
 - `BaseIngestor`やdataset registryは作らない。
 
 完了条件: 複数銘柄、配当、分割、欠損tickerを処理できること。
+
+実装・検証結果（2026-08-16）:
+
+- 最新のJPX listed-issues Parquetからnon-nullのYahoo ticker候補を読み込む。
+- 100 ticker単位、`threads=False`で逐次取得する。
+- `auto_adjust=False`、`actions=True`、`keepna=True`、`repair=False`を固定する。
+- CLIの開始日・終了日は包含とし、yfinanceの排他的endには1日加算して渡す。
+- 通信例外は2秒、4秒、8秒の待機で最大3回リトライする。
+- MultiIndexレスポンスを日付・ticker単位へ正規化する。
+- raw OHLC、`adj_close`、volume、dividend、stock split、capital gainsを保持する。
+- `YahooDailyBars` `DataFrameModel`で日付、ticker、型、一意性、high/lowを検証する。
+- 日足は`equity_daily_bars/trade_date=.../ingested_at=...`へ保存する。
+- ticker別の`available`・`no_data`と有効行数をrange単位のcoverage Parquetへ保存する。
+- `stock-analytics ingest yahoo-daily-bars --start-date ... --end-date ...`を追加した。
+- 自動テスト50件、Ruff、format、ty、dbt parseが成功した。
+- 実APIで株式2銘柄とETF 1銘柄の6営業日、計18行を取得・検証・一時保存できた。
+- Yahoo Financeは個人・研究用途の暫定sourceとして扱い、J-Quants到着後に置換する。
 
 ### Task 7: 本番Dockerイメージ — 未着手
 

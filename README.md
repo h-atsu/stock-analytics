@@ -88,6 +88,28 @@ uv run stock-analytics ingest listed-issues --output-dir data/raw/jpx
 
 4桁の銘柄コードにはYahoo ticker候補として`.T`を付与します。5桁の種類株式は誤った銘柄へ対応付けないため、Yahoo tickerをnullにします。
 
+## Yahoo Finance日足の取得
+
+最新のJPX上場銘柄一覧にあるYahoo ticker候補を使い、raw OHLC、調整後終値、出来高、配当、株式分割、capital gainsを取得します。開始日と終了日はどちらも包含です。
+
+```bash
+uv run stock-analytics ingest yahoo-daily-bars \
+  --start-date 2026-08-03 \
+  --end-date 2026-08-10
+```
+
+JPX一覧や出力先を変更する場合:
+
+```bash
+uv run stock-analytics ingest yahoo-daily-bars \
+  --start-date 2026-08-03 \
+  --end-date 2026-08-10 \
+  --listed-issues-dir data/raw/jpx \
+  --output-dir data/raw/yfinance
+```
+
+取得結果は取引日別Parquet、tickerごとの取得可否はcoverage Parquetへ保存します。Yahoo Financeデータは個人・研究用途の暫定補完として扱います。
+
 ## 開発時の検証
 
 ```bash

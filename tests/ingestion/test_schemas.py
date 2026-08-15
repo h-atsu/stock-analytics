@@ -7,10 +7,12 @@ from jquantsapi.constants import FIN_SUMMARY_COLUMNS_V2
 
 from stock_analytics.ingestion.schemas import (
     JpxListedIssues,
+    YahooCoverage,
     daily_bars_model,
     earnings_date_model,
     equity_master_model,
     financial_summary_model,
+    yahoo_daily_bars_model,
 )
 
 
@@ -116,6 +118,36 @@ def valid_jpx_listed_issues() -> pd.DataFrame:
             "scale_code": ["6", None],
             "scale_category": ["TOPIX Small 1", None],
             "yahoo_ticker": ["1301.T", pd.NA],
+        }
+    )
+
+
+def valid_yahoo_daily_bars() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "trade_date": pd.to_datetime(["2026-08-03", "2026-08-03"]),
+            "yahoo_ticker": ["1301.T", "7203.T"],
+            "open": [100.0, 200.0],
+            "high": [110.0, 210.0],
+            "low": [95.0, 190.0],
+            "close": [105.0, 205.0],
+            "adj_close": [104.0, 204.0],
+            "volume": [1000.0, 2000.0],
+            "dividends": [0.0, 10.0],
+            "stock_splits": [0.0, 2.0],
+            "capital_gains": [float("nan"), 0.0],
+        }
+    )
+
+
+def valid_yahoo_coverage() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "yahoo_ticker": ["1301.T", "9999.T"],
+            "status": ["available", "no_data"],
+            "row_count": [5, 0],
+            "start_date": pd.to_datetime(["2026-08-01", "2026-08-01"]),
+            "end_date": pd.to_datetime(["2026-08-07", "2026-08-07"]),
         }
     )
 
@@ -284,3 +316,27 @@ def test_jpx_listed_issues_rejects_multiple_snapshot_dates() -> None:
 
     with pytest.raises(pa.errors.SchemaErrors, match="has_one_snapshot_date"):
         JpxListedIssues.validate(frame, lazy=True)
+
+
+def test_yahoo_daily_bars_model_accepts_actions_and_nullable_values() -> None:
+    validated = yahoo_daily_bars_model(date(2026, 8, 3)).validate(
+        valid_yahoo_daily_bars(), lazy=True
+    )
+
+    assert len(validated) == 2
+    assert pd.isna(validated["capital_gains"].iloc[0])
+
+
+def test_yahoo_daily_bars_model_rejects_other_trade_date() -> None:
+    frame = valid_yahoo_daily_bars().assign(trade_date=pd.Timestamp("2026-08-04"))
+
+    with pytest.raises(pa.errors.SchemaErrors, match="matches_requested_trade_date"):
+        yahoo_daily_bars_model(date(2026, 8, 3)).validate(frame, lazy=True)
+
+
+def test_yahoo_coverage_rejects_inconsistent_status() -> None:
+    frame = valid_yahoo_coverage()
+    frame.loc[1, "status"] = "available"
+
+    with pytest.raises(pa.errors.SchemaErrors, match="status_matches_row_count"):
+        YahooCoverage.validate(frame, lazy=True)

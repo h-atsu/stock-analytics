@@ -10,6 +10,8 @@ from stock_analytics.ingestion.storage import (
     store_equity_master,
     store_financial_summary,
     store_jpx_listed_issues,
+    store_yahoo_coverage,
+    store_yahoo_daily_bars,
 )
 from tests.ingestion.test_schemas import (
     valid_daily_bars,
@@ -17,6 +19,8 @@ from tests.ingestion.test_schemas import (
     valid_equity_master,
     valid_financial_summary,
     valid_jpx_listed_issues,
+    valid_yahoo_coverage,
+    valid_yahoo_daily_bars,
 )
 
 
@@ -205,3 +209,48 @@ def test_store_jpx_listed_issues_writes_source_and_skips_same_hash(tmp_path) -> 
         ingested_at=datetime(2026, 8, 16, 12, 0, tzinfo=UTC),
     )
     assert duplicate is None
+
+
+def test_store_yahoo_daily_bars_writes_daily_partition(tmp_path) -> None:
+    ingested_at = datetime(2026, 8, 16, 12, 0, tzinfo=UTC)
+
+    artifact = store_yahoo_daily_bars(
+        valid_yahoo_daily_bars(),
+        date(2026, 8, 3),
+        tmp_path,
+        ingested_at=ingested_at,
+    )
+
+    assert artifact.data_path == (
+        tmp_path
+        / "equity_daily_bars"
+        / "trade_date=2026-08-03"
+        / "ingested_at=20260816T120000.000000Z"
+        / "data.parquet"
+    )
+    stored = pd.read_parquet(artifact.data_path)
+    assert stored["_source"].unique().tolist() == ["yfinance.download"]
+
+
+def test_store_yahoo_coverage_writes_range_partition(tmp_path) -> None:
+    ingested_at = datetime(2026, 8, 16, 12, 0, tzinfo=UTC)
+
+    artifact = store_yahoo_coverage(
+        valid_yahoo_coverage(),
+        date(2026, 8, 1),
+        date(2026, 8, 7),
+        tmp_path,
+        ingested_at=ingested_at,
+    )
+
+    assert artifact.data_path == (
+        tmp_path
+        / "equity_daily_bars_coverage"
+        / "start_date=2026-08-01"
+        / "end_date=2026-08-07"
+        / "ingested_at=20260816T120000.000000Z"
+        / "data.parquet"
+    )
+    manifest = json.loads(artifact.manifest_path.read_text(encoding="utf-8"))
+    assert manifest["row_count"] == 2
+    assert manifest["source"] == "yfinance.download"

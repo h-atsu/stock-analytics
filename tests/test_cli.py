@@ -4,6 +4,7 @@ from typer.testing import CliRunner
 
 from stock_analytics.cli import app
 from stock_analytics.ingestion.storage import IngestionArtifact, ListedIssuesArtifact
+from stock_analytics.ingestion.yahoo import YahooIngestionResult
 
 runner = CliRunner()
 
@@ -177,3 +178,47 @@ def test_listed_issues_command_reports_unchanged(monkeypatch, tmp_path: Path) ->
 
     assert result.exit_code == 0
     assert result.stdout == "unchanged=true\n"
+
+
+def test_yahoo_daily_bars_command(monkeypatch, tmp_path: Path) -> None:
+    coverage = IngestionArtifact(
+        data_path=tmp_path / "coverage.parquet",
+        manifest_path=tmp_path / "coverage.json",
+        row_count=2,
+    )
+    result_value = YahooIngestionResult(
+        data_artifacts=(),
+        coverage_artifact=coverage,
+        row_count=10,
+        available_ticker_count=1,
+        no_data_ticker_count=1,
+    )
+    monkeypatch.setattr(
+        "stock_analytics.cli.load_latest_yahoo_tickers",
+        lambda listed_issues_dir: ["1301.T", "9999.T"],
+    )
+    monkeypatch.setattr(
+        "stock_analytics.cli.ingest_yahoo_daily_bars",
+        lambda tickers, start_date, end_date, output_dir: result_value,
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "ingest",
+            "yahoo-daily-bars",
+            "--start-date",
+            "2026-08-01",
+            "--end-date",
+            "2026-08-07",
+            "--listed-issues-dir",
+            str(tmp_path),
+            "--output-dir",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "rows=10" in result.stdout
+    assert "available_tickers=1" in result.stdout
+    assert "no_data_tickers=1" in result.stdout

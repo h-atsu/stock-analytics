@@ -16,6 +16,10 @@ from stock_analytics.ingestion.jquants import (
     ingest_equity_master,
     ingest_financial_summary,
 )
+from stock_analytics.ingestion.yahoo import (
+    ingest_yahoo_daily_bars,
+    load_latest_yahoo_tickers,
+)
 
 app = typer.Typer(no_args_is_help=True, help="Stock analytics data pipeline.")
 ingest_app = typer.Typer(no_args_is_help=True, help="Ingest source data.")
@@ -197,3 +201,58 @@ def listed_issues(
     typer.echo(f"source={artifact.source_path}")
     typer.echo(f"parquet={artifact.data_path}")
     typer.echo(f"manifest={artifact.manifest_path}")
+
+
+@ingest_app.command("yahoo-daily-bars")
+def yahoo_daily_bars(
+    start_date: Annotated[
+        str,
+        typer.Option("--start-date", help="取得開始日（YYYY-MM-DD、包含）。"),
+    ],
+    end_date: Annotated[
+        str,
+        typer.Option("--end-date", help="取得終了日（YYYY-MM-DD、包含）。"),
+    ],
+    listed_issues_dir: Annotated[
+        Path,
+        typer.Option(
+            "--listed-issues-dir",
+            help="JPX上場銘柄一覧の出力ルート。",
+            file_okay=False,
+            dir_okay=True,
+        ),
+    ] = Path("data/raw/jpx"),
+    output_dir: Annotated[
+        Path,
+        typer.Option(
+            "--output-dir",
+            help="rawデータの出力ルート。",
+            file_okay=False,
+            dir_okay=True,
+        ),
+    ] = Path("data/raw/yfinance"),
+) -> None:
+    """Yahoo Financeの日足とコーポレートアクションを保存する。"""
+    parsed_start = _parse_iso_date(start_date)
+    parsed_end = _parse_iso_date(end_date)
+
+    try:
+        tickers = load_latest_yahoo_tickers(listed_issues_dir)
+        result = ingest_yahoo_daily_bars(
+            tickers,
+            parsed_start,
+            parsed_end,
+            output_dir,
+        )
+    except pa.errors.SchemaErrors as exc:
+        typer.echo(f"データ検証に失敗しました:\n{exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    except Exception as exc:
+        typer.echo(f"取り込みに失敗しました: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(f"rows={result.row_count}")
+    typer.echo(f"daily_files={len(result.data_artifacts)}")
+    typer.echo(f"available_tickers={result.available_ticker_count}")
+    typer.echo(f"no_data_tickers={result.no_data_ticker_count}")
+    typer.echo(f"coverage={result.coverage_artifact.data_path}")

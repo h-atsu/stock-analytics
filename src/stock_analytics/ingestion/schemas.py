@@ -224,3 +224,67 @@ class JpxListedIssues(pa.DataFrameModel):
         strict = True
         unique = "security_code"
         name = "jpx_listed_issues"
+
+
+class YahooDailyBars(pa.DataFrameModel):
+    """Normalized yfinance daily-bars response contract."""
+
+    trade_date: Series[pd.Timestamp]
+    yahoo_ticker: Series[str] = pa.Field(str_matches=r"^[0-9A-Z]{4}\.T$")
+    open: Series[float] = pa.Field(nullable=True)
+    high: Series[float] = pa.Field(nullable=True)
+    low: Series[float] = pa.Field(nullable=True)
+    close: Series[float] = pa.Field(nullable=True)
+    adj_close: Series[float] = pa.Field(nullable=True)
+    volume: Series[float] = pa.Field(ge=0, nullable=True)
+    dividends: Series[float] = pa.Field(ge=0, nullable=True)
+    stock_splits: Series[float] = pa.Field(ge=0, nullable=True)
+    capital_gains: Series[float] = pa.Field(nullable=True)
+
+    @pa.dataframe_check
+    def is_not_empty(cls, frame: pd.DataFrame) -> bool:
+        return not frame.empty
+
+    @pa.dataframe_check
+    def high_is_not_below_low(cls, frame: pd.DataFrame) -> Series[bool]:
+        return (
+            frame["high"].isna() | frame["low"].isna() | frame["high"].ge(frame["low"])
+        )
+
+    class Config:
+        strict = True
+        unique: ClassVar[list[str]] = ["trade_date", "yahoo_ticker"]
+        name = "yahoo_daily_bars"
+
+
+def yahoo_daily_bars_model(trade_date: date) -> type[YahooDailyBars]:
+    """Create a Yahoo daily-bars contract scoped to one trade date."""
+
+    class YahooDailyBarsForTradeDate(YahooDailyBars):
+        @pa.check("trade_date")
+        def matches_requested_trade_date(
+            cls, series: Series[pd.Timestamp]
+        ) -> Series[bool]:
+            return series.dt.date.eq(trade_date)
+
+    YahooDailyBarsForTradeDate.__name__ = f"YahooDailyBars_{trade_date:%Y%m%d}"
+    return YahooDailyBarsForTradeDate
+
+
+class YahooCoverage(pa.DataFrameModel):
+    """Ticker coverage for one yfinance ingestion run."""
+
+    yahoo_ticker: Series[str] = pa.Field(str_matches=r"^[0-9A-Z]{4}\.T$")
+    status: Series[str] = pa.Field(isin=["available", "no_data"])
+    row_count: Series[int] = pa.Field(ge=0)
+    start_date: Series[pd.Timestamp]
+    end_date: Series[pd.Timestamp]
+
+    @pa.dataframe_check
+    def status_matches_row_count(cls, frame: pd.DataFrame) -> Series[bool]:
+        return frame["status"].eq("available").eq(frame["row_count"].gt(0))
+
+    class Config:
+        strict = True
+        unique = "yahoo_ticker"
+        name = "yahoo_coverage"
