@@ -7,3 +7,8 @@ output "bigquery_dataset_id" {
   description = "BigQuery dataset used by raw tables and dbt models"
   value       = google_bigquery_dataset.stock_analytics.dataset_id
 }
+
+output "raw_data_bucket_name" {
+  description = "GCS bucket for validated raw ingestion artifacts"
+  value       = google_storage_bucket.raw_data.name
+}

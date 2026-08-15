@@ -293,7 +293,7 @@ yfinanceの取得条件は実装内の固定値から開始し、不要なCLIオ
 - GCS backend接続を除くoffline検証で`terraform validate`とダミーprojectへの`terraform plan -refresh=false`が成功し、2 resources add、0 change、0 destroyを確認した。
 - gcloudの既定projectが未設定のため、state bucket作成、GCS backend初期化、実プロジェクトへのplan/applyは未実施。
 
-### Task 9: データ基盤Terraform — 着手（BigQuery dataset実装済み）
+### Task 9: データ基盤Terraform — 着手（BigQuery・raw GCS実装済み）
 
 - raw用GCS bucketを作る。
 - BigQueryは`stock_analytics`単一datasetから始め、raw・staging・intermediate・martsはテーブル名で区別する。
@@ -309,6 +309,10 @@ yfinanceの取得条件は実装内の固定値から開始し、不要なCLIオ
 - `delete_contents_on_destroy=false`とし、テーブルがあるdatasetの誤削除を防止する。
 - dbt用service accountとdataset IAMはCloud Run Jobの実行主体と合わせて後続実装する。
 - GCS backend接続を除くoffline検証で`terraform validate`と`terraform plan -refresh=false`が成功し、Task 8分を含め4 resources add、0 change、0 destroyを確認した。
+- 検証済みraw artifact用にTokyoリージョンの`${project_id}-stock-analytics-raw` GCS bucketを追加した。
+- raw bucketはuniform bucket-level access、public access prevention、7日間のsoft delete、`force_destroy=false`を設定する。
+- raw objectは`ingested_at`付きのimmutable pathに保存するため、bucket versioningと自動削除は現時点で追加しない。
+- raw GCS追加後のoffline Terraform planは合計6 resources add、0 change、0 destroyで成功した。
 
 ### Task 10: GCS publishとBigQuery load — 未着手
 
