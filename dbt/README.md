@@ -1,15 +1,79 @@
-Welcome to your new dbt project!
+# dbt development
 
-### Using the starter project
+BigQueryの`stock_analytics` dataset内で、`raw_`テーブルを`stg_` viewへ正規化します。環境別datasetやcustom schemaは、必要になるまで追加しません。
 
-Try running the following commands:
-- dbt run
-- dbt test
+## 初期設定
 
+Application Default Credentialsを設定します。
 
-### Resources:
-- Learn more about dbt [in the docs](https://docs.getdbt.com/docs/introduction)
-- Check out [Discourse](https://discourse.getdbt.com/) for commonly asked questions and answers
-- Join the [chat](https://community.getdbt.com/) on Slack for live discussions and support
-- Find [dbt events](https://events.getdbt.com) near you
-- Check out [the blog](https://blog.getdbt.com/) for the latest news on dbt's development and best practices
+```bash
+gcloud auth application-default login
+gcloud auth application-default set-quota-project stock-analytics-505614
+```
+
+標準の`~/.dbt/profiles.yml`へprofileを作り、GCP projectを環境変数で指定します。
+
+```bash
+mkdir -p ~/.dbt
+# profiles.ymlがすでにある場合はstock_analytics entryだけを追記する
+cp dbt/profiles.yml.example ~/.dbt/profiles.yml
+export GCP_PROJECT_ID=stock-analytics-505614
+```
+
+`DBT_DATASET`と`GCP_REGION`のデフォルトは、それぞれ`stock_analytics`と`asia-northeast1`です。
+
+接続確認:
+
+```bash
+uv run dbt debug --project-dir dbt
+```
+
+## 開発コマンド
+
+```bash
+# 構文と依存関係だけを確認
+uv run dbt parse --project-dir dbt
+
+# raw sourceの更新時刻を確認
+uv run dbt source freshness --project-dir dbt
+
+# staging viewとdata testを構築
+uv run dbt build --project-dir dbt --select tag:staging
+
+# SQLだけを再構築
+uv run dbt run --project-dir dbt --select tag:staging
+
+# stagingのdata testだけを実行
+uv run dbt test --project-dir dbt --select tag:staging
+```
+
+`~/.dbt/profiles.yml`はGit管理しません。API keyやservice account keyをprofileへ保存せず、localではADC、Cloud Runではservice accountを使用します。
+
+## SQLの検証とドキュメント
+
+SQLFluffはBigQuery方言とdbt組み込みmacroを扱えるJinja templaterを使用します。lint時にBigQueryへ接続しません。
+
+```bash
+uv run sqlfluff lint dbt/models dbt/tests
+uv run sqlfluff fix dbt/models dbt/tests
+uv run dbt docs generate --project-dir dbt
+uv run dbt docs serve --project-dir dbt
+```
+
+GitHub Actionsはmain branchのdbt関連ファイル更新時に、BigQueryへ接続せず空のcatalogでdbt Docsを生成してGitHub Pagesへ公開します。初回だけGitHubの`Settings > Pages > Build and deployment > Source`で`GitHub Actions`を選択してください。
+
+## staging契約
+
+| model | grain |
+|---|---|
+| `stg_jquants_daily_bars` | `trade_date, security_code` |
+| `stg_yahoo_daily_bars` | `trade_date, yahoo_ticker` |
+| `stg_jquants_equity_master` | `snapshot_date, security_code` |
+| `stg_jpx_listed_issues` | `snapshot_date, security_code` |
+| `stg_jquants_financial_summary` | `disclosure_date, security_code, disclosure_number` |
+| `stg_jquants_earnings_date` | `publication_date, security_code, fiscal_quarter_name` |
+| `stg_yahoo_daily_bars_coverage` | `start_date, end_date, yahoo_ticker` |
+
+すべてのstaging modelは、grainごとに`_ingested_at`が最新のraw行を採用します。vendor固有の列名はsnake_caseへ変換し、財務値は`safe_cast`で`numeric`へ変換します。
+
+stagingでは価格調整、J-Quants優先、最新銘柄スナップショットの選択、財務指標計算を行いません。これらはintermediate以降の責務です。

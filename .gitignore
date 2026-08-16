@@ -21,6 +21,7 @@ data/
 dbt/target/
 dbt/logs/
 dbt/dbt_packages/
+/logs/
 
 # Terraform local files
 **/.terraform/*

@@ -165,24 +165,18 @@ yfinanceの取得条件は実装内の固定値から開始し、不要なCLIオ
 - 自動テスト25件、Ruff、tyが成功した。
 - 実APIで2024-07-25開示分の43行・111列を取得、検証、一時保存できた。
 
-### Task 4: セクター・市場区分マスター — 完了
+### Task 4: セクター・市場区分マスター — 保留
 
 - 安定した小規模マスターはdbt seedで管理する。
 - 汎用マスター管理層は作らない。
 
 完了条件: seedの一意性・not nullテストが通ること。
 
-実装・検証結果（2026-08-15）:
+現状（2026-08-16）:
 
-- 最小のdbtプロジェクトを`dbt/`へ作成した。
-- `sector_17`、`sector_33`、`market_segments`の3 seedを追加した。
-- コード列はBigQueryで`string`になるよう明示し、先頭ゼロを保持する。
-- コードのunique/not null、名称のnot nullをdata testとして定義した。
-- 33業種の`sector_17_code`から17業種seedへのrelationships testを定義した。
-- J-Quants同梱コード表の英語名称にある末尾空白と明らかな欠字だけを正規化した。
-- dbt 1.12.2で3 seeds、14 data testsをparse・選択できた。
-- CSVは17業種18行、33業種34行、市場区分10行で、一意性・非空・参照整合性を確認した。
-- BigQueryへの`dbt seed`とdata testの実行は、GCP環境構築後に行う。
+- 最小のdbtプロジェクトだけが作成済みで、seed CSVは未実装だったため状態を訂正した。
+- stagingではJ-Quants・JPXのraw列に含まれる業種・市場名称をそのまま正規化する。
+- 静的seedとrelationships testは、intermediateで独立マスターが必要になった時点で実装する。
 
 ### Task 4.5: 決算発表予定日取得 — 完了
 
@@ -343,13 +337,28 @@ yfinanceの取得条件は実装内の固定値から開始し、不要なCLIオ
 - `stock-analytics load raw`で現在対応する全raw artifactをloadできる。
 - 初回の`load raw`は日付ごとに数千のload jobを作らず、7 rawテーブルをそれぞれ1 jobで全置換する。日次用の`load daily-bars`はpartition置換を維持する。
 
-### Task 11: dbt staging — 未着手
+### Task 11: dbt staging — 完了
 
 - source freshness、not null、unique、accepted valuesを定義する。
 - source別に列名、型、security codeを正規化する。
 - 同一source・銘柄・日付は最新の`_ingested_at`を採用する。
 
 完了条件: rawから正規化済みstagingを`dbt build`で再現できること。
+
+実装・検証結果（2026-08-16、途中）:
+
+- 7 rawテーブルをdbt sourceとして定義し、更新頻度に応じたfreshnessを設定した。
+- 7 staging viewでvendor列をsnake_caseへ変換し、grainごとに最新の`_ingested_at`を採用する。
+- 財務111列の一括変換は行わず、価格分析・基本的なファンダメンタル分析に必要な識別列、実績、予想、配当、株式数、ROEを明示的に選択した。
+- 複合一意キー、not null、価格制限flag、Yahoo coverage statusのdata testを追加した。
+- `profiles.yml.example`と`~/.dbt/profiles.yml`、local ADCを使うdbt開発手順を追加した。
+- Parquet調査でJ-Quants `ExRT`のall-null日だけ物理型が`null`になることを検出し、今後は保存時に`string`へ固定するようingestionを修正した。
+- Parquetの`timestamp[ns]`である財務期間列と決算予定日がBigQuery rawではナノ秒epochの`INT64`になるため、stagingでDATEへ明示変換する。
+- dbt parseで7 models、41 data tests、7 sourcesを解決できた。
+- 実BigQueryで7 staging viewの作成と41 data tests、合計48件がすべて成功した。
+- 7 raw sourcesのfreshnessがすべてPASSした。
+- SQLFluff、Terraform formatter、Python・dbt・TerraformのGitHub Actions CIを追加した。
+- GCP認証なしのdbt Docs生成とGitHub Pages公開workflowを追加した。
 
 ### Task 12: dbt intermediateとcanonical価格 — 未着手
 
@@ -433,7 +442,7 @@ Asia/Tokyoを基準にする。休場日やno-dataは正常なno-opとし、検�
 
 - Airflow、Workflows、Pub/Sub、Dataflow
 - devcontainer
-- CI/CDによる自動deploy
+- Cloud Run JobのCI/CDによる自動deploy
 - 複数Cloud Run Jobへの分割
 - ファンダメンタルスコア
 - ロバストポートフォリオ

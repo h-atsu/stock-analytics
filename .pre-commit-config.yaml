@@ -37,3 +37,16 @@ repos:
         language: system
         types_or: [python, pyi]
         pass_filenames: false
+
+      - id: sqlfluff-fix
+        name: sqlfluff fix
+        entry: uv run --frozen sqlfluff fix
+        language: system
+        files: ^dbt/.*\.sql$
+
+      - id: terraform-fmt
+        name: terraform fmt
+        entry: terraform fmt -recursive infra
+        language: system
+        files: ^infra/.*\.tf$
+        pass_filenames: false

@@ -204,20 +204,29 @@ Terraform構成は`infra/`直下で管理します。初回のstate bucket作成
 ```bash
 uv run pytest
 uv run ruff check .
+uv run ruff format --check .
 uv run ty check
+uv run sqlfluff lint dbt/models dbt/tests
+terraform fmt -check -recursive infra
 ```
 
-## dbtマスターseed
-
-分析で利用する小規模なコードマスターを`dbt/seeds`で管理します。
-
-- JPX 17業種区分
-- JPX 33業種区分と17業種区分の対応
-- JPX市場区分（過去区分を含む）
-
-BigQuery環境とdbt profileの構築後、次のコマンドで投入・検証します。
+pre-commitの有効化:
 
 ```bash
-uv run dbt seed --project-dir dbt
-uv run dbt test --project-dir dbt --select resource_type:seed
+uv run pre-commit install
+uv run pre-commit run --all-files
 ```
+
+## dbt開発
+
+rawテーブルから7つのstaging viewを作成し、vendor固有の列名・型を正規化します。local profileの準備やモデルのgrainは[`dbt/README.md`](dbt/README.md)を参照してください。
+
+```bash
+mkdir -p ~/.dbt
+# profiles.ymlがすでにある場合はstock_analytics entryだけを追記する
+cp dbt/profiles.yml.example ~/.dbt/profiles.yml
+export GCP_PROJECT_ID=stock-analytics-505614
+uv run dbt build --project-dir dbt --select tag:staging
+```
+
+main branchのdbt関連ファイルを更新すると、GitHub Actionsがdbt Docsを生成してGitHub Pagesへ公開します。初回だけrepositoryのPages sourceを`GitHub Actions`へ設定してください。
