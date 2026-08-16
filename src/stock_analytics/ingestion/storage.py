@@ -158,8 +158,10 @@ def store_daily_bars(
     *,
     ingested_at: datetime | None = None,
 ) -> IngestionArtifact:
+    stored_frame = frame.copy()
+    stored_frame["ExRT"] = stored_frame["ExRT"].astype("string")
     return _store_date_partition(
-        frame,
+        stored_frame,
         trade_date,
         output_root,
         dataset_name=DATASET_NAME,

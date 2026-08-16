@@ -1,0 +1,134 @@
+version: 2
+
+models:
+  - name: stg_jquants_daily_bars
+    description: J-Quants日足をsnake_caseへ正規化し、銘柄・取引日ごとの最新ingestionを採用したview。
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [trade_date, security_code]
+    columns:
+      - name: trade_date
+        data_tests: [not_null]
+      - name: security_code
+        data_tests: [not_null]
+      - name: upper_limit_flag
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["0", "1"]
+      - name: lower_limit_flag
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["0", "1"]
+      - name: adjustment_factor
+        data_tests: [not_null]
+      - name: _ingested_at
+        data_tests: [not_null]
+
+  - name: stg_yahoo_daily_bars
+    description: Yahoo Finance日足を銘柄・取引日ごとの最新ingestionへ重複排除したview。
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [trade_date, yahoo_ticker]
+    columns:
+      - name: trade_date
+        data_tests: [not_null]
+      - name: security_code
+        data_tests: [not_null]
+      - name: yahoo_ticker
+        data_tests: [not_null]
+      - name: _ingested_at
+        data_tests: [not_null]
+
+  - name: stg_jquants_equity_master
+    description: J-Quants銘柄マスターを基準日・銘柄ごとの最新ingestionへ重複排除したview。
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [snapshot_date, security_code]
+    columns:
+      - name: snapshot_date
+        data_tests: [not_null]
+      - name: security_code
+        data_tests: [not_null]
+      - name: company_name
+        data_tests: [not_null]
+      - name: _ingested_at
+        data_tests: [not_null]
+
+  - name: stg_jpx_listed_issues
+    description: JPX上場銘柄一覧を基準日・銘柄ごとの最新ingestionへ重複排除したview。
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [snapshot_date, security_code]
+    columns:
+      - name: snapshot_date
+        data_tests: [not_null]
+      - name: security_code
+        data_tests: [not_null]
+      - name: security_name
+        data_tests: [not_null]
+      - name: _ingested_at
+        data_tests: [not_null]
+
+  - name: stg_jquants_financial_summary
+    description: 分析に使用するJ-Quants財務項目を型変換し、開示キーごとの最新ingestionを採用したview。
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [disclosure_date, security_code, disclosure_number]
+    columns:
+      - name: disclosure_date
+        data_tests: [not_null]
+      - name: security_code
+        data_tests: [not_null]
+      - name: disclosure_number
+        data_tests: [not_null]
+      - name: document_type
+        data_tests: [not_null]
+      - name: _ingested_at
+        data_tests: [not_null]
+
+  - name: stg_jquants_earnings_date
+    description: J-Quants決算予定履歴を公表日・銘柄・四半期ごとの最新ingestionへ重複排除したview。
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [publication_date, security_code, fiscal_quarter_name]
+    columns:
+      - name: publication_date
+        data_tests: [not_null]
+      - name: security_code
+        data_tests: [not_null]
+      - name: fiscal_quarter_name
+        data_tests: [not_null]
+      - name: _ingested_at
+        data_tests: [not_null]
+
+  - name: stg_yahoo_daily_bars_coverage
+    description: Yahoo Finance取得runのcoverageを期間・tickerごとの最新ingestionへ重複排除したview。
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [start_date, end_date, yahoo_ticker]
+    columns:
+      - name: start_date
+        data_tests: [not_null]
+      - name: end_date
+        data_tests: [not_null]
+      - name: yahoo_ticker
+        data_tests: [not_null]
+      - name: status
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["available", "no_data"]
+      - name: row_count
+        data_tests: [not_null]
+      - name: _ingested_at
+        data_tests: [not_null]

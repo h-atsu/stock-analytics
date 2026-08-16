@@ -1,0 +1,57 @@
+version: 2
+
+sources:
+  - name: raw
+    description: GCS上の検証済みParquetからloadしたvendor別rawテーブル。
+    database: "{{ target.database }}"
+    schema: "{{ target.schema }}"
+    tables:
+      - name: raw_jquants_equity_daily_bars
+        description: J-Quantsの日足。再取得履歴を含む。
+        config:
+          loaded_at_field: _ingested_at
+          freshness:
+            warn_after: {count: 2, period: day}
+            error_after: {count: 7, period: day}
+      - name: raw_yahoo_equity_daily_bars
+        description: Yahoo Financeの日足・配当・株式分割。再取得履歴を含む。
+        config:
+          loaded_at_field: _ingested_at
+          freshness:
+            warn_after: {count: 2, period: day}
+            error_after: {count: 7, period: day}
+      - name: raw_jquants_equity_master
+        description: J-Quants銘柄マスターのスナップショット。
+        config:
+          loaded_at_field: _ingested_at
+          freshness:
+            warn_after: {count: 35, period: day}
+            error_after: {count: 60, period: day}
+      - name: raw_jquants_financial_summary
+        description: J-Quants財務サマリー。
+        config:
+          loaded_at_field: _ingested_at
+          freshness:
+            warn_after: {count: 2, period: day}
+            error_after: {count: 7, period: day}
+      - name: raw_jquants_earnings_date
+        description: J-Quants決算発表予定日の変更履歴。
+        config:
+          loaded_at_field: _ingested_at
+          freshness:
+            warn_after: {count: 2, period: day}
+            error_after: {count: 7, period: day}
+      - name: raw_jpx_listed_issues
+        description: JPX現行上場銘柄一覧のスナップショット。
+        config:
+          loaded_at_field: _ingested_at
+          freshness:
+            warn_after: {count: 35, period: day}
+            error_after: {count: 60, period: day}
+      - name: raw_yahoo_equity_daily_bars_coverage
+        description: Yahoo Finance取得runごとのticker coverage。
+        config:
+          loaded_at_field: _ingested_at
+          freshness:
+            warn_after: {count: 7, period: day}
+            error_after: {count: 14, period: day}

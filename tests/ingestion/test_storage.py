@@ -45,6 +45,7 @@ def test_store_daily_bars_writes_partitioned_parquet_and_manifest(tmp_path) -> N
     assert len(stored) == 2
     assert stored["Code"].tolist() == ["13010", "13020"]
     assert stored["_source"].unique().tolist() == ["/equities/bars/daily"]
+    assert str(stored["ExRT"].dtype) == "string"
     assert str(stored["Date"].dtype) == "object"
 
     manifest = json.loads(artifact.manifest_path.read_text(encoding="utf-8"))
