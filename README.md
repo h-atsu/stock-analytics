@@ -174,7 +174,7 @@ uv run stock-analytics bootstrap raw \
   --bucket stock-analytics-505614-stock-analytics-raw
 ```
 
-正常なmanifestがあるJ-Quants partitionと、同一期間のYahoo coverageがあるrunはスキップします。途中で失敗した場合は、同じコマンドを再実行してください。休場日や開示データがない日は`no_data`として扱います。J-Quantsはリクエストごとに2秒間隔を空け、429応答時は60秒、120秒、240秒の順に待機して再試行します。
+正常なmanifestがあるJ-Quants partitionと、同一期間のYahoo coverageがあるrunはスキップします。途中で失敗した場合は、同じコマンドを再実行してください。休場日や開示データがない日は`no_data`として扱います。J-QuantsはFreeプランの毎分5リクエスト制限を超えないよう、リクエストごとに13秒間隔を空けます。429応答時は60秒、120秒、240秒の順に待機して再試行します。
 
 ## Docker実行
 

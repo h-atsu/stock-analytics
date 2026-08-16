@@ -43,6 +43,9 @@ uv run dbt build --project-dir dbt --select +tag:staging
 # コードマスターseedとそのstaging viewを構築
 uv run dbt build --project-dir dbt --select raw_jquants_sector_17 raw_jquants_sector_33 raw_jquants_market_segments stg_jquants__sector_17 stg_jquants__sector_33 stg_jquants__market_segments
 
+# canonical日次価格tableと依存model・testを構築
+uv run dbt build --project-dir dbt --select +tag:intermediate
+
 # SQLだけを再構築
 uv run dbt run --project-dir dbt --select tag:staging
 
@@ -98,3 +101,14 @@ Pages版には、project overview、source/model lineage、grain、data test、�
 stagingでは価格調整、J-Quants優先、最新銘柄スナップショットの選択、財務指標計算を行いません。これらはintermediate以降の責務です。
 
 コードマスターseedはJ-Quantsの列名と値を未加工で保持します。対応する`stg_jquants__*` viewでsnake_caseへの変換、文字列のtrim、既知の名称欠字の補正を行います。
+
+## intermediate契約
+
+| model | grain | materialization |
+|---|---|---|
+| `int_yahoo__daily_prices` | `trade_date, security_code` | table |
+| `int_stock__daily_prices` | `trade_date, security_code` | table |
+
+`int_yahoo__daily_prices`はYahooの4桁コードへ末尾`0`を付け、J-Quantsの5桁コードへ揃えます。YahooのOHLC・出来高はvendor側で原則split調整済みのため、`Stock Splits`を再適用しません。`Adj Close`は配当を含み得る比較用vendor値として別に保持します。
+
+`int_stock__daily_prices`はJ-QuantsとYahooをfull outer joinし、同じ銘柄・取引日にJ-Quants行があれば、価格がnullでもJ-Quants行を採用します。Yahoo採用行は`price_source='yahoo'`かつ`is_provisional=true`です。Yahooの配当・splitはJ-Quants価格を採用した日にも保持します。

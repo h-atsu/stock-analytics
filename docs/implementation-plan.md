@@ -1,6 +1,6 @@
 # 東証株価分析基盤 実装計画
 
-最終更新日: 2026-08-16
+最終更新日: 2026-08-17
 
 ## 進め方
 
@@ -362,7 +362,7 @@ yfinanceの取得条件は実装内の固定値から開始し、不要なCLIオ
 - dbt Docsのoverview、共通用語、全staging出力列、raw sourceのbusiness keyと運用列を文書化した。
 - stagingモデル名は`stg_<source>__<entity>`へ統一した。
 
-### Task 12: dbt intermediateとcanonical価格 — 未着手
+### Task 12: dbt intermediateとcanonical価格 — 着手
 
 - Yahooのsplitからsplit-adjusted OHLC/volumeを計算する。
 - J-Quantsは提供されたadjusted列を使う。
@@ -374,6 +374,18 @@ yfinanceの取得条件は実装内の固定値から開始し、不要なCLIオ
 - 決算予定履歴から銘柄・決算期ごとの最新予定日を導出する。
 
 完了条件: source片側、両側、後着、split、dividendのdbtテストが通ること。
+
+実装・検証結果（2026-08-17、途中）:
+
+- `int_yahoo__daily_prices`でYahooの4桁コードをJ-Quants形式の5桁コードへ変換する。
+- YahooのOHLC・出来高はvendor側で原則split調整済みのため、`Stock Splits`を再適用せず、配当を含み得る`Adj Close`は比較用に分離する。
+- `int_stock__daily_prices`はJ-QuantsとYahooをfull outer joinし、同一キーにJ-Quants行があれば価格がnullでもJ-Quantsを採用する。
+- Yahoo-onlyの過去・直近行を`price_source='yahoo'`、`is_provisional=true`として保持し、J-Quants後着時はtable再構築だけで置換する。
+- Yahooの配当・split・capital gainsは、価格sourceがJ-Quantsの日にも保持する。
+- 5桁コード変換、split二重適用防止、source片側・両側、J-Quants優先のdbt unit test 2件がBigQueryで成功した。
+- BigQueryで`int_yahoo__daily_prices` 22,200行、`int_stock__daily_prices` 49,200行をtableとして構築できた。
+- 一意性、not null、source precedence、provisional flag、価格レンジのdata testは成功した。
+- 現在の部分bootstrapデータでは、4,079 overlap行のうちsplit調整済み終値差1%超が25行あり、品質error testが意図どおり失敗した。Yahoo履歴とcorporate actionを全期間bootstrapした後に再評価する。
 
 ### Task 13: 最小マート — 未着手
 

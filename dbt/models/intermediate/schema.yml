@@ -1,0 +1,153 @@
+version: 2
+
+models:
+  - name: int_yahoo__daily_prices
+    description: Yahoo Finance日足をJ-Quantsの5桁銘柄コードへ揃え、vendorが返すsplit調整済みOHLC・出来高を明示したtable。grainは`trade_date, security_code`。
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [trade_date, security_code]
+    columns:
+      - name: trade_date
+        description: "{{ doc('trade_date') }}"
+        data_tests: [not_null]
+      - name: security_code
+        description: Yahoo tickerの4桁コードに`0`を付けたJ-Quants形式の5桁銘柄コード。
+        data_tests: [not_null]
+      - name: yahoo_ticker
+        description: "{{ doc('yahoo_ticker') }}"
+        data_tests: [not_null]
+      - name: open
+        description: Yahoo Financeが返した始値。vendor側でsplit調整済み。
+      - name: high
+        description: Yahoo Financeが返した高値。vendor側でsplit調整済み。
+      - name: low
+        description: Yahoo Financeが返した安値。vendor側でsplit調整済み。
+      - name: close
+        description: Yahoo Financeが返した終値。vendor側でsplit調整済み、配当未調整。
+      - name: volume
+        description: Yahoo Financeが返した出来高。vendor側でsplit調整済み。
+      - name: split_adjusted_open
+        description: Yahoo Financeがsplit調整済みで返した始値。
+      - name: split_adjusted_high
+        description: Yahoo Financeがsplit調整済みで返した高値。
+      - name: split_adjusted_low
+        description: Yahoo Financeがsplit調整済みで返した安値。
+      - name: split_adjusted_close
+        description: Yahoo Financeがsplit調整済みで返した終値。配当は反映しない。
+      - name: split_adjusted_volume
+        description: Yahoo Financeがsplit調整済みで返した出来高。
+      - name: dividend_per_share
+        description: Yahoo Financeが返した当日の1株当たり配当。
+      - name: stock_split_ratio
+        description: Yahoo Financeが返した当日のsplit比率。イベントがなければ0。
+      - name: capital_gains
+        description: Yahoo Financeが返したcapital gainsイベント。
+      - name: yahoo_adjusted_close
+        description: Yahoo FinanceのAdj Close。配当を含み得るvendor値として比較用に保持する。
+
+  - name: int_stock__daily_prices
+    description: J-QuantsとYahoo Financeを銘柄・取引日で結合し、J-Quants行があれば価格を優先するcanonical日次価格table。grainは`trade_date, security_code`。
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [trade_date, security_code]
+    columns:
+      - name: trade_date
+        description: "{{ doc('trade_date') }}"
+        data_tests: [not_null]
+      - name: security_code
+        description: J-Quants形式の5桁銘柄コード。
+        data_tests: [not_null]
+      - name: open
+        description: 採用sourceのvendor始値。J-Quantsでは未調整、Yahooではsplit調整済み。
+      - name: high
+        description: 採用sourceのvendor高値。J-Quantsでは未調整、Yahooではsplit調整済み。
+      - name: low
+        description: 採用sourceのvendor安値。J-Quantsでは未調整、Yahooではsplit調整済み。
+      - name: close
+        description: 採用sourceのvendor終値。J-Quantsでは未調整、Yahooではsplit調整済み。
+      - name: volume
+        description: 採用sourceのvendor出来高。J-Quantsでは未調整、Yahooではsplit調整済み。
+      - name: split_adjusted_open
+        description: 採用sourceのsplit調整済み始値。
+      - name: split_adjusted_high
+        description: 採用sourceのsplit調整済み高値。
+      - name: split_adjusted_low
+        description: 採用sourceのsplit調整済み安値。
+      - name: split_adjusted_close
+        description: 採用sourceのsplit調整済み終値。配当は反映しない。
+      - name: split_adjusted_volume
+        description: 採用sourceのsplit調整済み出来高。
+      - name: dividend_per_share
+        description: 同一銘柄・取引日のYahoo Finance配当。Yahoo行がなければnull。
+      - name: stock_split_ratio
+        description: 同一銘柄・取引日のYahoo Finance split比率。Yahoo行がなければnull。
+      - name: capital_gains
+        description: 同一銘柄・取引日のYahoo Finance capital gains。
+      - name: price_source
+        description: 価格の採用source。`jquants`または`yahoo`。
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [jquants, yahoo]
+      - name: corporate_action_source
+        description: 配当・splitのsource。対応するYahoo行がある場合は`yahoo`、なければnull。
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [yahoo]
+      - name: is_provisional
+        description: J-Quantsで確認されていないYahoo採用価格ならtrue。
+        data_tests: [not_null]
+      - name: has_jquants
+        description: 同一銘柄・取引日のJ-Quants行が存在するか。
+        data_tests: [not_null]
+      - name: has_yahoo
+        description: 同一銘柄・取引日のYahoo Finance行が存在するか。
+        data_tests: [not_null]
+      - name: jquants_close
+        description: source比較・診断用のJ-Quants未調整終値。
+      - name: yahoo_close
+        description: source比較・診断用にYahoo Financeが返したsplit調整済み終値。
+      - name: jquants_split_adjusted_close
+        description: source比較用のJ-Quants split調整済み終値。
+      - name: yahoo_split_adjusted_close
+        description: source比較用のYahoo Finance split調整済み終値。
+      - name: close_relative_difference
+        description: overlap時のvendor終値の絶対差をJ-Quants未調整終値の絶対値で除した診断値。source間品質テストにはsplit調整済みの差を使用する。
+      - name: split_adjusted_close_relative_difference
+        description: overlap時のsplit調整済み終値の絶対差をJ-Quants終値の絶対値で除した値。
+
+unit_tests:
+  - name: yahoo_prices_do_not_apply_split_twice
+    description: YahooのOHLC・出来高をsplit調整済みとして扱い、splitイベントを再適用しない。
+    model: int_yahoo__daily_prices
+    given:
+      - input: ref('stg_yahoo__daily_bars')
+        rows:
+          - {trade_date: '2024-01-01', security_code: '7203', yahoo_ticker: '7203.T', open: 100.0, high: 110.0, low: 90.0, close: 100.0, adjusted_close: 50.0, volume: 1000.0, dividends: 0.0, stock_splits: 0.0, capital_gains: 0.0}
+          - {trade_date: '2024-01-02', security_code: '7203', yahoo_ticker: '7203.T', open: 52.0, high: 56.0, low: 50.0, close: 55.0, adjusted_close: 55.0, volume: 2000.0, dividends: 0.0, stock_splits: 2.0, capital_gains: 0.0}
+    expect:
+      rows:
+        - {trade_date: '2024-01-01', security_code: '72030', split_adjusted_open: 100.0, split_adjusted_high: 110.0, split_adjusted_low: 90.0, split_adjusted_close: 100.0, split_adjusted_volume: 1000.0}
+        - {trade_date: '2024-01-02', security_code: '72030', split_adjusted_open: 52.0, split_adjusted_high: 56.0, split_adjusted_low: 50.0, split_adjusted_close: 55.0, split_adjusted_volume: 2000.0}
+
+  - name: stock_prices_prefer_jquants_and_fall_back_to_yahoo
+    description: overlapではJ-Quantsを採用し、片側だけの行も保持する。
+    model: int_stock__daily_prices
+    given:
+      - input: ref('stg_jquants__daily_bars')
+        rows:
+          - {trade_date: '2024-01-01', security_code: '72030', open: 100.0, high: 110.0, low: 90.0, close: 100.0, volume: 1000.0, adjusted_open: 100.0, adjusted_high: 110.0, adjusted_low: 90.0, adjusted_close: 100.0, adjusted_volume: 1000.0}
+          - {trade_date: '2024-01-03', security_code: '72030', open: 120.0, high: 125.0, low: 115.0, close: 122.0, volume: 1200.0, adjusted_open: 120.0, adjusted_high: 125.0, adjusted_low: 115.0, adjusted_close: 122.0, adjusted_volume: 1200.0}
+      - input: ref('int_yahoo__daily_prices')
+        rows:
+          - {trade_date: '2024-01-01', security_code: '72030', open: 101.0, high: 111.0, low: 91.0, close: 101.0, volume: 1001.0, split_adjusted_open: 101.0, split_adjusted_high: 111.0, split_adjusted_low: 91.0, split_adjusted_close: 101.0, split_adjusted_volume: 1001.0, dividend_per_share: 1.0, stock_split_ratio: 0.0, capital_gains: 0.0}
+          - {trade_date: '2024-01-02', security_code: '72030', open: 110.0, high: 115.0, low: 105.0, close: 112.0, volume: 1100.0, split_adjusted_open: 110.0, split_adjusted_high: 115.0, split_adjusted_low: 105.0, split_adjusted_close: 112.0, split_adjusted_volume: 1100.0, dividend_per_share: 0.0, stock_split_ratio: 0.0, capital_gains: 0.0}
+    expect:
+      rows:
+        - {trade_date: '2024-01-01', security_code: '72030', open: 100.0, dividend_per_share: 1.0, price_source: jquants, corporate_action_source: yahoo, is_provisional: false, has_jquants: true, has_yahoo: true}
+        - {trade_date: '2024-01-02', security_code: '72030', open: 110.0, dividend_per_share: 0.0, price_source: yahoo, corporate_action_source: yahoo, is_provisional: true, has_jquants: false, has_yahoo: true}
+        - {trade_date: '2024-01-03', security_code: '72030', open: 120.0, dividend_per_share: null, price_source: jquants, corporate_action_source: null, is_provisional: false, has_jquants: true, has_yahoo: false}

@@ -19,6 +19,9 @@ models:
     staging:
       +materialized: view
       +tags: ["staging"]
+    intermediate:
+      +materialized: table
+      +tags: ["intermediate"]
 
 seeds:
   stock_analytics:
