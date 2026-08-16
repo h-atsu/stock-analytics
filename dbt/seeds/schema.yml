@@ -1,0 +1,49 @@
+version: 2
+
+seeds:
+  - name: raw_jquants_sector_17
+    description: J-Quantsクライアントに同梱されたTOPIX-17業種コード表。
+    columns:
+      - name: S17
+        description: TOPIX-17業種コード。
+        data_tests: [not_null, unique]
+      - name: S17Nm
+        description: TOPIX-17業種名の日本語表記。
+        data_tests: [not_null]
+      - name: S17NmEn
+        description: TOPIX-17業種名の英語表記。vendor値を未加工で保持する。
+        data_tests: [not_null]
+
+  - name: raw_jquants_sector_33
+    description: J-Quantsクライアントに同梱された東証33業種コード表とTOPIX-17業種への対応。
+    columns:
+      - name: S33
+        description: 東証33業種コード。
+        data_tests: [not_null, unique]
+      - name: S33Nm
+        description: 東証33業種名の日本語表記。
+        data_tests: [not_null]
+      - name: S33NmEn
+        description: 東証33業種名の英語表記。
+        data_tests: [not_null]
+      - name: S17
+        description: 対応するTOPIX-17業種コード。
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('raw_jquants_sector_17')
+                field: S17
+
+  - name: raw_jquants_market_segments
+    description: J-Quantsクライアントに同梱された旧区分を含む市場区分コード表。
+    columns:
+      - name: Mkt
+        description: J-Quants市場区分コード。
+        data_tests: [not_null, unique]
+      - name: MktNm
+        description: 市場区分名の日本語表記。
+        data_tests: [not_null]
+      - name: MktNmEn
+        description: 市場区分名の英語表記。
+        data_tests: [not_null]

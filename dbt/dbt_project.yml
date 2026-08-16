@@ -19,3 +19,16 @@ models:
     staging:
       +materialized: view
       +tags: ["staging"]
+
+seeds:
+  stock_analytics:
+    raw_jquants_sector_17:
+      +column_types:
+        S17: string
+    raw_jquants_sector_33:
+      +column_types:
+        S33: string
+        S17: string
+    raw_jquants_market_segments:
+      +column_types:
+        Mkt: string

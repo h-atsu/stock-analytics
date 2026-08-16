@@ -38,7 +38,10 @@ uv run dbt parse --project-dir dbt
 uv run dbt source freshness --project-dir dbt
 
 # staging viewとdata testを構築
-uv run dbt build --project-dir dbt --select tag:staging
+uv run dbt build --project-dir dbt --select +tag:staging
+
+# コードマスターseedとそのstaging viewを構築
+uv run dbt build --project-dir dbt --select raw_jquants_sector_17 raw_jquants_sector_33 raw_jquants_market_segments stg_jquants__sector_17 stg_jquants__sector_33 stg_jquants__market_segments
 
 # SQLだけを再構築
 uv run dbt run --project-dir dbt --select tag:staging
@@ -86,7 +89,12 @@ Pages版には、project overview、source/model lineage、grain、data test、�
 | `stg_jquants__financial_summary` | `disclosure_date, security_code, disclosure_number` |
 | `stg_jquants__earnings_date` | `publication_date, security_code, fiscal_quarter_name` |
 | `stg_yahoo__daily_bars_coverage` | `start_date, end_date, yahoo_ticker` |
+| `stg_jquants__sector_17` | `sector_17_code` |
+| `stg_jquants__sector_33` | `sector_33_code` |
+| `stg_jquants__market_segments` | `market_code` |
 
 すべてのstaging modelは、grainごとに`_ingested_at`が最新のraw行を採用します。vendor固有の列名はsnake_caseへ変換し、財務値は`safe_cast`で`numeric`へ変換します。
 
 stagingでは価格調整、J-Quants優先、最新銘柄スナップショットの選択、財務指標計算を行いません。これらはintermediate以降の責務です。
+
+コードマスターseedはJ-Quantsの列名と値を未加工で保持します。対応する`stg_jquants__*` viewでsnake_caseへの変換、文字列のtrim、既知の名称欠字の補正を行います。

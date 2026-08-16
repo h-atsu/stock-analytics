@@ -121,16 +121,31 @@ models:
         description: 会社名または銘柄名の英語表記。
       - name: sector_17_code
         description: TOPIX-17業種コード。
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('stg_jquants__sector_17')
+                field: sector_17_code
       - name: sector_17_name
         description: TOPIX-17業種名。
       - name: sector_33_code
         description: 東証33業種コード。
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('stg_jquants__sector_33')
+                field: sector_33_code
       - name: sector_33_name
         description: 東証33業種名。
       - name: scale_category
         description: 規模区分。vendorの欠損表現`-`はnullへ変換済み。
       - name: market_code
         description: J-Quants市場区分コード。
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('stg_jquants__market_segments')
+                field: market_code
       - name: market_name
         description: J-Quants市場区分名。
       - name: margin_code
@@ -357,3 +372,50 @@ models:
         data_tests: [not_null]
       - name: _source
         description: "{{ doc('source_endpoint') }}"
+
+  - name: stg_jquants__sector_17
+    description: J-Quants同梱のTOPIX-17業種seedをsnake_caseへ正規化したview。grainは`sector_17_code`。
+    columns:
+      - name: sector_17_code
+        description: TOPIX-17業種コード。
+        data_tests: [not_null, unique]
+      - name: sector_17_name
+        description: TOPIX-17業種名の日本語表記。
+        data_tests: [not_null]
+      - name: sector_17_name_en
+        description: TOPIX-17業種名の英語表記。末尾空白と明らかな欠字を正規化済み。
+        data_tests: [not_null]
+
+  - name: stg_jquants__sector_33
+    description: J-Quants同梱の東証33業種seedをsnake_caseへ正規化したview。grainは`sector_33_code`。
+    columns:
+      - name: sector_33_code
+        description: 東証33業種コード。
+        data_tests: [not_null, unique]
+      - name: sector_33_name
+        description: 東証33業種名の日本語表記。
+        data_tests: [not_null]
+      - name: sector_33_name_en
+        description: 東証33業種名の英語表記。
+        data_tests: [not_null]
+      - name: sector_17_code
+        description: 対応するTOPIX-17業種コード。
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_jquants__sector_17')
+                field: sector_17_code
+
+  - name: stg_jquants__market_segments
+    description: J-Quants同梱の旧区分を含む市場区分seedをsnake_caseへ正規化したview。grainは`market_code`。
+    columns:
+      - name: market_code
+        description: J-Quants市場区分コード。
+        data_tests: [not_null, unique]
+      - name: market_name
+        description: 市場区分名の日本語表記。
+        data_tests: [not_null]
+      - name: market_name_en
+        description: 市場区分名の英語表記。
+        data_tests: [not_null]
