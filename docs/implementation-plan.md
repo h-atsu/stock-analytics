@@ -359,6 +359,8 @@ yfinanceの取得条件は実装内の固定値から開始し、不要なCLIオ
 - 7 raw sourcesのfreshnessがすべてPASSした。
 - SQLFluff、Terraform formatter、Python・dbt・TerraformのGitHub Actions CIを追加した。
 - GCP認証なしのdbt Docs生成とGitHub Pages公開workflowを追加した。
+- dbt Docsのoverview、共通用語、全staging出力列、raw sourceのbusiness keyと運用列を文書化した。
+- stagingモデル名は`stg_<source>__<entity>`へ統一した。
 
 ### Task 12: dbt intermediateとcanonical価格 — 未着手
 
