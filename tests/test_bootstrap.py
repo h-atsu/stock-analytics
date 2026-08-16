@@ -38,7 +38,7 @@ def test_jquants_request_waits_and_retries_429() -> None:
 
     assert result == "ok"
     assert attempts == 2
-    assert sleeps == [60.0, 2.0]
+    assert sleeps == [60.0, 13.0]
     assert "60秒待機" in messages[0]
 
 

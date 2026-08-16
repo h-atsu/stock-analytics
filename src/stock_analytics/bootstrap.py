@@ -37,7 +37,8 @@ JQUANTS_DELAY = timedelta(weeks=12)
 JQUANTS_YEARS = 2
 YAHOO_YEARS = 5
 MASTER_LOOKBACK_DAYS = 10
-JQUANTS_REQUEST_INTERVAL_SECONDS = 2.0
+# Freeプランの上限（5 requests/minute）を超えないように余裕を持たせる。
+JQUANTS_REQUEST_INTERVAL_SECONDS = 13.0
 JQUANTS_RATE_LIMIT_DELAYS = (60.0, 120.0, 240.0)
 
 Progress = Callable[[str], None]
