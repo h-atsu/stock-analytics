@@ -7,49 +7,118 @@ sources:
     schema: "{{ target.schema }}"
     tables:
       - name: raw_jquants_equity_daily_bars
-        description: J-Quantsの日足。再取得履歴を含む。
+        description: J-Quantsの日足。business keyは`Date, Code`で、複数の`_ingested_at`による再取得履歴を含む。
+        columns:
+          - name: Date
+            description: 取引日。
+          - name: Code
+            description: 東証銘柄コード。
+          - name: _ingested_at
+            description: "{{ doc('ingested_at') }}"
+          - name: _source
+            description: "{{ doc('source_endpoint') }}"
         config:
           loaded_at_field: _ingested_at
           freshness:
             warn_after: {count: 2, period: day}
             error_after: {count: 7, period: day}
       - name: raw_yahoo_equity_daily_bars
-        description: Yahoo Financeの日足・配当・株式分割。再取得履歴を含む。
+        description: Yahoo Financeの日足・配当・株式分割。business keyは`trade_date, yahoo_ticker`で、再取得履歴を含む。
+        columns:
+          - name: trade_date
+            description: "{{ doc('trade_date') }}"
+          - name: yahoo_ticker
+            description: "{{ doc('yahoo_ticker') }}"
+          - name: _ingested_at
+            description: "{{ doc('ingested_at') }}"
+          - name: _source
+            description: "{{ doc('source_endpoint') }}"
         config:
           loaded_at_field: _ingested_at
           freshness:
             warn_after: {count: 2, period: day}
             error_after: {count: 7, period: day}
       - name: raw_jquants_equity_master
-        description: J-Quants銘柄マスターのスナップショット。
+        description: J-Quants銘柄マスターのスナップショット。business keyは`Date, Code`。
+        columns:
+          - name: Date
+            description: snapshotの基準日。
+          - name: Code
+            description: 東証銘柄コード。
+          - name: _ingested_at
+            description: "{{ doc('ingested_at') }}"
+          - name: _source
+            description: "{{ doc('source_endpoint') }}"
         config:
           loaded_at_field: _ingested_at
           freshness:
             warn_after: {count: 35, period: day}
             error_after: {count: 60, period: day}
       - name: raw_jquants_financial_summary
-        description: J-Quants財務サマリー。
+        description: J-Quants財務サマリー。business keyは`DiscDate, Code, DiscNo`。
+        columns:
+          - name: DiscDate
+            description: 開示日。
+          - name: Code
+            description: 東証銘柄コード。
+          - name: DiscNo
+            description: 開示番号。
+          - name: _ingested_at
+            description: "{{ doc('ingested_at') }}"
+          - name: _source
+            description: "{{ doc('source_endpoint') }}"
         config:
           loaded_at_field: _ingested_at
           freshness:
             warn_after: {count: 2, period: day}
             error_after: {count: 7, period: day}
       - name: raw_jquants_earnings_date
-        description: J-Quants決算発表予定日の変更履歴。
+        description: J-Quants決算発表予定日の変更履歴。business keyは`PubDate, Code, FQName`。
+        columns:
+          - name: PubDate
+            description: 予定情報の公表日。
+          - name: Code
+            description: 東証銘柄コード。
+          - name: FQName
+            description: 対象決算四半期名。
+          - name: _ingested_at
+            description: "{{ doc('ingested_at') }}"
+          - name: _source
+            description: "{{ doc('source_endpoint') }}"
         config:
           loaded_at_field: _ingested_at
           freshness:
             warn_after: {count: 2, period: day}
             error_after: {count: 7, period: day}
       - name: raw_jpx_listed_issues
-        description: JPX現行上場銘柄一覧のスナップショット。
+        description: JPX現行上場銘柄一覧のスナップショット。business keyは`snapshot_date, security_code`。
+        columns:
+          - name: snapshot_date
+            description: "{{ doc('snapshot_date') }}"
+          - name: security_code
+            description: "{{ doc('security_code') }}"
+          - name: _ingested_at
+            description: "{{ doc('ingested_at') }}"
+          - name: _source
+            description: "{{ doc('source_endpoint') }}"
         config:
           loaded_at_field: _ingested_at
           freshness:
             warn_after: {count: 35, period: day}
             error_after: {count: 60, period: day}
       - name: raw_yahoo_equity_daily_bars_coverage
-        description: Yahoo Finance取得runごとのticker coverage。
+        description: Yahoo Finance取得runごとのticker coverage。business keyは`start_date, end_date, yahoo_ticker`。
+        columns:
+          - name: start_date
+            description: 取得要求期間の開始日（inclusive）。
+          - name: end_date
+            description: 取得要求期間の終了日（exclusive）。
+          - name: yahoo_ticker
+            description: "{{ doc('yahoo_ticker') }}"
+          - name: _ingested_at
+            description: "{{ doc('ingested_at') }}"
+          - name: _source
+            description: "{{ doc('source_endpoint') }}"
         config:
           loaded_at_field: _ingested_at
           freshness:

@@ -62,17 +62,30 @@ uv run dbt docs serve --project-dir dbt
 
 GitHub Actionsはmain branchのdbt関連ファイル更新時に、BigQueryへ接続せず空のcatalogでdbt Docsを生成してGitHub Pagesへ公開します。初回だけGitHubの`Settings > Pages > Build and deployment > Source`で`GitHub Actions`を選択してください。
 
+Pages版には、project overview、source/model lineage、grain、data test、宣言済み列の説明が含まれます。`--empty-catalog`で生成するため、BigQueryから取得する物理型・行数などのcatalog metadataは含みません。ADCを使ってlocalで`dbt docs generate`を実行すると、実テーブルのcatalog metadataも確認できます。
+
+モデルを追加・変更するときは、同じ変更で次を更新します。
+
+- modelの責務とgrain
+- 公開する全列のdescription
+- business keyのunique testと必須列のnot null test
+- source固有値、変換済み値、intermediate以降へ持ち越す責務の区別
+
+複数modelで意味が同じ列は`dbt/docs/common_columns.md`のdoc blockを再利用します。projectのトップページは`dbt/docs/overview.md`で管理します。
+
 ## staging契約
+
+モデル名は`stg_<source>__<entity>`とし、sourceとentityの境界を二重underscoreで表します。例: `stg_jquants__daily_bars`。
 
 | model | grain |
 |---|---|
-| `stg_jquants_daily_bars` | `trade_date, security_code` |
-| `stg_yahoo_daily_bars` | `trade_date, yahoo_ticker` |
-| `stg_jquants_equity_master` | `snapshot_date, security_code` |
-| `stg_jpx_listed_issues` | `snapshot_date, security_code` |
-| `stg_jquants_financial_summary` | `disclosure_date, security_code, disclosure_number` |
-| `stg_jquants_earnings_date` | `publication_date, security_code, fiscal_quarter_name` |
-| `stg_yahoo_daily_bars_coverage` | `start_date, end_date, yahoo_ticker` |
+| `stg_jquants__daily_bars` | `trade_date, security_code` |
+| `stg_yahoo__daily_bars` | `trade_date, yahoo_ticker` |
+| `stg_jquants__equity_master` | `snapshot_date, security_code` |
+| `stg_jpx__listed_issues` | `snapshot_date, security_code` |
+| `stg_jquants__financial_summary` | `disclosure_date, security_code, disclosure_number` |
+| `stg_jquants__earnings_date` | `publication_date, security_code, fiscal_quarter_name` |
+| `stg_yahoo__daily_bars_coverage` | `start_date, end_date, yahoo_ticker` |
 
 すべてのstaging modelは、grainごとに`_ingested_at`が最新のraw行を採用します。vendor固有の列名はsnake_caseへ変換し、財務値は`safe_cast`で`numeric`へ変換します。
 

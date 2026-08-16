@@ -1,134 +1,359 @@
 version: 2
 
 models:
-  - name: stg_jquants_daily_bars
-    description: J-Quants日足をsnake_caseへ正規化し、銘柄・取引日ごとの最新ingestionを採用したview。
+  - name: stg_jquants__daily_bars
+    description: J-Quants日足をsnake_caseへ正規化し、銘柄・取引日ごとの最新ingestionを採用したview。grainは`trade_date, security_code`。
     data_tests:
       - unique_combination:
           arguments:
             columns: [trade_date, security_code]
     columns:
       - name: trade_date
+        description: "{{ doc('trade_date') }}"
         data_tests: [not_null]
       - name: security_code
+        description: "{{ doc('security_code') }}"
         data_tests: [not_null]
+      - name: open
+        description: 未調整の始値。
+      - name: high
+        description: 未調整の高値。
+      - name: low
+        description: 未調整の安値。
+      - name: close
+        description: 未調整の終値。
       - name: upper_limit_flag
+        description: J-Quantsが提供するストップ高フラグ。`0`または`1`。
         data_tests:
           - accepted_values:
               arguments:
                 values: ["0", "1"]
       - name: lower_limit_flag
+        description: J-Quantsが提供するストップ安フラグ。`0`または`1`。
         data_tests:
           - accepted_values:
               arguments:
                 values: ["0", "1"]
+      - name: volume
+        description: 未調整の出来高。
+      - name: turnover_value
+        description: 売買代金。
       - name: adjustment_factor
+        description: 株式分割などを反映するためJ-Quantsが提供する調整係数。
         data_tests: [not_null]
+      - name: adjusted_open
+        description: J-Quants提供の調整済み始値。
+      - name: adjusted_high
+        description: J-Quants提供の調整済み高値。
+      - name: adjusted_low
+        description: J-Quants提供の調整済み安値。
+      - name: adjusted_close
+        description: J-Quants提供の調整済み終値。
+      - name: adjusted_volume
+        description: J-Quants提供の調整済み出来高。
+      - name: market_cap
+        description: J-Quants提供の時価総額。
+      - name: ex_rights_flag
+        description: J-Quants提供の権利落ち情報。
       - name: _ingested_at
+        description: "{{ doc('ingested_at') }}"
         data_tests: [not_null]
+      - name: _source
+        description: "{{ doc('source_endpoint') }}"
 
-  - name: stg_yahoo_daily_bars
-    description: Yahoo Finance日足を銘柄・取引日ごとの最新ingestionへ重複排除したview。
+  - name: stg_yahoo__daily_bars
+    description: Yahoo Finance日足を銘柄・取引日ごとの最新ingestionへ重複排除したview。grainは`trade_date, yahoo_ticker`。J-Quantsとの統合前の暫定source。
     data_tests:
       - unique_combination:
           arguments:
             columns: [trade_date, yahoo_ticker]
     columns:
       - name: trade_date
+        description: "{{ doc('trade_date') }}"
         data_tests: [not_null]
       - name: security_code
+        description: Yahoo tickerから`.T`を除いて導出した東証銘柄コード。
         data_tests: [not_null]
       - name: yahoo_ticker
+        description: "{{ doc('yahoo_ticker') }}"
         data_tests: [not_null]
+      - name: open
+        description: Yahoo Financeが返した未調整の始値。
+      - name: high
+        description: Yahoo Financeが返した未調整の高値。
+      - name: low
+        description: Yahoo Financeが返した未調整の安値。
+      - name: close
+        description: Yahoo Financeが返した未調整の終値。
+      - name: adjusted_close
+        description: "`auto_adjust=False`でYahoo Financeが返したAdj Close。"
+      - name: volume
+        description: Yahoo Financeが返した出来高。
+      - name: dividends
+        description: 当日の1株当たり配当イベント。イベントがなければ0。
+      - name: stock_splits
+        description: 当日の株式分割比率。イベントがなければ0。
+      - name: capital_gains
+        description: Yahoo Financeが返したcapital gainsイベント。
       - name: _ingested_at
+        description: "{{ doc('ingested_at') }}"
         data_tests: [not_null]
+      - name: _source
+        description: "{{ doc('source_endpoint') }}"
 
-  - name: stg_jquants_equity_master
-    description: J-Quants銘柄マスターを基準日・銘柄ごとの最新ingestionへ重複排除したview。
+  - name: stg_jquants__equity_master
+    description: J-Quants銘柄マスターを基準日・銘柄ごとの最新ingestionへ重複排除したview。grainは`snapshot_date, security_code`。
     data_tests:
       - unique_combination:
           arguments:
             columns: [snapshot_date, security_code]
     columns:
       - name: snapshot_date
+        description: "{{ doc('snapshot_date') }}"
         data_tests: [not_null]
       - name: security_code
+        description: "{{ doc('security_code') }}"
         data_tests: [not_null]
       - name: company_name
+        description: 会社名または銘柄名の日本語表記。
         data_tests: [not_null]
+      - name: company_name_en
+        description: 会社名または銘柄名の英語表記。
+      - name: sector_17_code
+        description: TOPIX-17業種コード。
+      - name: sector_17_name
+        description: TOPIX-17業種名。
+      - name: sector_33_code
+        description: 東証33業種コード。
+      - name: sector_33_name
+        description: 東証33業種名。
+      - name: scale_category
+        description: 規模区分。vendorの欠損表現`-`はnullへ変換済み。
+      - name: market_code
+        description: J-Quants市場区分コード。
+      - name: market_name
+        description: J-Quants市場区分名。
+      - name: margin_code
+        description: 信用取引区分コード。
+      - name: margin_name
+        description: 信用取引区分名。
       - name: _ingested_at
+        description: "{{ doc('ingested_at') }}"
         data_tests: [not_null]
+      - name: _source
+        description: "{{ doc('source_endpoint') }}"
 
-  - name: stg_jpx_listed_issues
-    description: JPX上場銘柄一覧を基準日・銘柄ごとの最新ingestionへ重複排除したview。
+  - name: stg_jpx__listed_issues
+    description: JPX上場銘柄一覧を基準日・銘柄ごとの最新ingestionへ重複排除したview。grainは`snapshot_date, security_code`。現行上場銘柄とYahoo tickerの起点として使用する。
     data_tests:
       - unique_combination:
           arguments:
             columns: [snapshot_date, security_code]
     columns:
       - name: snapshot_date
+        description: "{{ doc('snapshot_date') }}"
         data_tests: [not_null]
       - name: security_code
+        description: "{{ doc('security_code') }}"
         data_tests: [not_null]
       - name: security_name
+        description: JPX上場銘柄名。
         data_tests: [not_null]
+      - name: market_product_category
+        description: 市場・商品区分。
+      - name: sector_33_code
+        description: 東証33業種コード。
+      - name: sector_33_name
+        description: 東証33業種名。
+      - name: sector_17_code
+        description: TOPIX-17業種コード。
+      - name: sector_17_name
+        description: TOPIX-17業種名。
+      - name: scale_code
+        description: JPX規模区分コード。
+      - name: scale_category
+        description: JPX規模区分名。
+      - name: yahoo_ticker
+        description: "{{ doc('yahoo_ticker') }}"
       - name: _ingested_at
+        description: "{{ doc('ingested_at') }}"
         data_tests: [not_null]
+      - name: _source
+        description: "{{ doc('source_endpoint') }}"
 
-  - name: stg_jquants_financial_summary
-    description: 分析に使用するJ-Quants財務項目を型変換し、開示キーごとの最新ingestionを採用したview。
+  - name: stg_jquants__financial_summary
+    description: 分析に使用するJ-Quants財務項目を型変換し、開示キーごとの最新ingestionを採用したview。grainは`disclosure_date, security_code, disclosure_number`。通貨・倍率は変換しない。
     data_tests:
       - unique_combination:
           arguments:
             columns: [disclosure_date, security_code, disclosure_number]
     columns:
       - name: disclosure_date
+        description: 財務情報の開示日。
         data_tests: [not_null]
+      - name: disclosure_time
+        description: 財務情報の開示時刻。
       - name: security_code
+        description: "{{ doc('security_code') }}"
         data_tests: [not_null]
       - name: disclosure_number
+        description: 同一銘柄・開示日内で開示を識別する番号。
         data_tests: [not_null]
       - name: document_type
+        description: 決算短信などの開示書類種別。
         data_tests: [not_null]
+      - name: current_period_type
+        description: 当期の期間種別。
+      - name: current_period_start_date
+        description: 当会計期間の開始日。
+      - name: current_period_end_date
+        description: 当会計期間の終了日。
+      - name: current_fiscal_year_start_date
+        description: 当会計年度の開始日。
+      - name: current_fiscal_year_end_date
+        description: 当会計年度の終了日。
+      - name: next_fiscal_year_start_date
+        description: 翌会計年度の開始日。
+      - name: next_fiscal_year_end_date
+        description: 翌会計年度の終了日。
+      - name: sales
+        description: 売上高の実績値。
+      - name: operating_profit
+        description: 営業利益の実績値。
+      - name: ordinary_profit
+        description: 経常利益の実績値。
+      - name: net_profit
+        description: 当期純利益の実績値。
+      - name: earnings_per_share
+        description: 1株当たり利益の実績値。
+      - name: diluted_earnings_per_share
+        description: 希薄化後1株当たり利益の実績値。
+      - name: total_assets
+        description: 総資産。
+      - name: equity
+        description: 純資産。
+      - name: equity_to_asset_ratio
+        description: 自己資本比率。
+      - name: book_value_per_share
+        description: 1株当たり純資産。
+      - name: cash_flow_from_operations
+        description: 営業活動によるキャッシュフロー。
+      - name: cash_flow_from_investing
+        description: 投資活動によるキャッシュフロー。
+      - name: cash_flow_from_financing
+        description: 財務活動によるキャッシュフロー。
+      - name: cash_and_equivalents
+        description: 現金及び現金同等物の期末残高。
+      - name: annual_dividend_per_share
+        description: 年間1株当たり配当の実績値。
+      - name: forecast_annual_dividend_per_share
+        description: 当期の予想年間1株当たり配当。
+      - name: next_forecast_annual_dividend_per_share
+        description: 翌期の予想年間1株当たり配当。
+      - name: forecast_sales
+        description: 当期売上高予想。
+      - name: forecast_operating_profit
+        description: 当期営業利益予想。
+      - name: forecast_ordinary_profit
+        description: 当期経常利益予想。
+      - name: forecast_net_profit
+        description: 当期純利益予想。
+      - name: forecast_earnings_per_share
+        description: 当期1株当たり利益予想。
+      - name: next_forecast_sales
+        description: 翌期売上高予想。
+      - name: next_forecast_operating_profit
+        description: 翌期営業利益予想。
+      - name: next_forecast_ordinary_profit
+        description: 翌期経常利益予想。
+      - name: next_forecast_net_profit
+        description: 翌期純利益予想。
+      - name: next_forecast_earnings_per_share
+        description: 翌期1株当たり利益予想。
+      - name: shares_outstanding
+        description: 期末発行済株式数。
+      - name: treasury_shares
+        description: 期末自己株式数。
+      - name: average_shares
+        description: 期中平均株式数。
+      - name: return_on_equity
+        description: 自己資本利益率（ROE）。
+      - name: material_subsidiary_change_flag
+        description: 重要な子会社の異動に関するvendor flag。
+      - name: significant_change_in_scope_flag
+        description: 連結範囲の重要な変更に関するvendor flag。
+      - name: accounting_standard_revision_flag
+        description: 会計基準改正に伴う変更のvendor flag。
+      - name: accounting_policy_change_flag
+        description: 会計方針変更のvendor flag。
+      - name: accounting_estimate_change_flag
+        description: 会計上の見積り変更のvendor flag。
+      - name: retrospective_restatement_flag
+        description: 遡及修正のvendor flag。
       - name: _ingested_at
+        description: "{{ doc('ingested_at') }}"
         data_tests: [not_null]
+      - name: _source
+        description: "{{ doc('source_endpoint') }}"
 
-  - name: stg_jquants_earnings_date
-    description: J-Quants決算予定履歴を公表日・銘柄・四半期ごとの最新ingestionへ重複排除したview。
+  - name: stg_jquants__earnings_date
+    description: J-Quants決算予定履歴を公表日・銘柄・四半期ごとの最新ingestionへ重複排除したview。grainは`publication_date, security_code, fiscal_quarter_name`。
     data_tests:
       - unique_combination:
           arguments:
             columns: [publication_date, security_code, fiscal_quarter_name]
     columns:
       - name: publication_date
+        description: 決算発表予定情報が公表された日。
         data_tests: [not_null]
-      - name: security_code
-        data_tests: [not_null]
+      - name: scheduled_date
+        description: 公表時点の決算発表予定日。
       - name: fiscal_quarter_name
+        description: 対象となる決算四半期名。
         data_tests: [not_null]
+      - name: fiscal_year_end
+        description: 対象企業の決算期末。
+      - name: security_code
+        description: "{{ doc('security_code') }}"
+        data_tests: [not_null]
+      - name: company_name
+        description: 会社名の日本語表記。
+      - name: company_name_en
+        description: 会社名の英語表記。
       - name: _ingested_at
+        description: "{{ doc('ingested_at') }}"
         data_tests: [not_null]
+      - name: _source
+        description: "{{ doc('source_endpoint') }}"
 
-  - name: stg_yahoo_daily_bars_coverage
-    description: Yahoo Finance取得runのcoverageを期間・tickerごとの最新ingestionへ重複排除したview。
+  - name: stg_yahoo__daily_bars_coverage
+    description: Yahoo Finance取得runのcoverageを期間・tickerごとの最新ingestionへ重複排除したview。grainは`start_date, end_date, yahoo_ticker`。取得欠損の監視に使用する。
     data_tests:
       - unique_combination:
           arguments:
             columns: [start_date, end_date, yahoo_ticker]
     columns:
-      - name: start_date
-        data_tests: [not_null]
-      - name: end_date
-        data_tests: [not_null]
       - name: yahoo_ticker
+        description: "{{ doc('yahoo_ticker') }}"
         data_tests: [not_null]
       - name: status
+        description: "`available`は1行以上取得、`no_data`は取得行なしを表す。"
         data_tests:
           - not_null
           - accepted_values:
               arguments:
                 values: ["available", "no_data"]
       - name: row_count
+        description: 対象ticker・期間で取得した日足行数。
+        data_tests: [not_null]
+      - name: start_date
+        description: 取得要求期間の開始日（inclusive）。
+        data_tests: [not_null]
+      - name: end_date
+        description: 取得要求期間の終了日（exclusive）。
         data_tests: [not_null]
       - name: _ingested_at
+        description: "{{ doc('ingested_at') }}"
         data_tests: [not_null]
+      - name: _source
+        description: "{{ doc('source_endpoint') }}"
