@@ -1,3 +1,4 @@
+import json
 from datetime import date
 from pathlib import Path
 
@@ -395,6 +396,7 @@ def test_pipeline_daily_command(monkeypatch, tmp_path: Path) -> None:
             no_data_count=2,
             yahoo_row_count=100,
             yahoo_no_data_ticker_count=3,
+            duration_seconds=12.5,
             publish_result=GcsPublishResult(16, 2),
             load_result=BigQueryLoadResult(7, 200),
         )
@@ -422,3 +424,27 @@ def test_pipeline_daily_command(monkeypatch, tmp_path: Path) -> None:
     assert "yahoo_start_date=2026-08-14" in result.stdout
     assert "yahoo_no_data_tickers=3" in result.stdout
     assert "loaded_partitions=7" in result.stdout
+
+    structured = runner.invoke(
+        app,
+        [
+            "pipeline",
+            "daily",
+            "--as-of",
+            "2026-08-21",
+            "--project",
+            "test-project",
+            "--bucket",
+            "raw-bucket",
+            "--output-dir",
+            str(tmp_path),
+            "--structured-logs",
+        ],
+    )
+
+    assert structured.exit_code == 0
+    summary = json.loads(structured.stdout.splitlines()[-1])
+    assert summary["event"] == "pipeline_complete"
+    assert summary["status"] == "success"
+    assert summary["sources"] == ["jpx", "jquants", "yahoo"]
+    assert summary["duration_seconds"] == 12.5

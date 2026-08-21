@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import re
+import time
 from datetime import date, datetime
 from pathlib import Path
 from typing import Annotated
@@ -53,6 +55,17 @@ def _parse_iso_date(value: str) -> date:
 
 def _today_in_tokyo() -> date:
     return datetime.now(ZoneInfo("Asia/Tokyo")).date()
+
+
+def _json_log(event: str, severity: str = "INFO", **fields: object) -> None:
+    typer.echo(
+        json.dumps(
+            {"event": event, "severity": severity, **fields},
+            ensure_ascii=False,
+            sort_keys=True,
+        ),
+        err=severity == "ERROR",
+    )
 
 
 @ingest_app.command("daily-bars")
@@ -482,10 +495,23 @@ def run_pipeline_daily(
         str,
         typer.Option("--region", help="BigQueryとCloud RunのGCP region。"),
     ] = DEFAULT_REGION,
+    structured_logs: Annotated[
+        bool,
+        typer.Option(
+            "--structured-logs/--no-structured-logs",
+            help="Cloud Logging向けJSON Linesを出力する。",
+        ),
+    ] = False,
 ) -> None:
     """日次データを取得し、GCS・BigQuery・dbtまで直列実行する。"""
     load_dotenv()
     parsed_as_of = _parse_iso_date(as_of) if as_of is not None else _today_in_tokyo()
+    started_at = time.monotonic()
+    progress = lambda message: (
+        _json_log("pipeline_progress", message=message)
+        if structured_logs
+        else typer.echo(message)
+    )
     try:
         result = run_daily_pipeline(
             parsed_as_of,
@@ -494,11 +520,43 @@ def run_pipeline_daily(
             output_dir,
             dataset,
             region,
-            progress=typer.echo,
+            progress=progress,
         )
     except Exception as exc:
-        typer.echo(f"日次pipelineに失敗しました: {exc}", err=True)
+        if structured_logs:
+            _json_log(
+                "pipeline_complete",
+                severity="ERROR",
+                status="error",
+                as_of=parsed_as_of.isoformat(),
+                duration_seconds=round(time.monotonic() - started_at, 3),
+                error_type=type(exc).__name__,
+                error=str(exc),
+            )
+        else:
+            typer.echo(f"日次pipelineに失敗しました: {exc}", err=True)
         raise typer.Exit(code=1) from exc
+
+    if structured_logs:
+        _json_log(
+            "pipeline_complete",
+            status="success",
+            as_of=result.as_of.isoformat(),
+            jquants_date=result.jquants_date.isoformat(),
+            yahoo_start_date=result.yahoo_start_date.isoformat(),
+            yahoo_end_date=result.as_of.isoformat(),
+            sources=["jpx", "jquants", "yahoo"],
+            fetched_artifacts=result.fetched_artifact_count,
+            skipped_artifacts=result.skipped_artifact_count,
+            no_data=result.no_data_count,
+            yahoo_rows=result.yahoo_row_count,
+            yahoo_no_data_tickers=result.yahoo_no_data_ticker_count,
+            uploaded_files=result.publish_result.uploaded_count,
+            loaded_partitions=result.load_result.loaded_partition_count,
+            loaded_rows=result.load_result.loaded_row_count,
+            duration_seconds=round(result.duration_seconds, 3),
+        )
+        return
 
     typer.echo(f"as_of={result.as_of}")
     typer.echo(f"jquants_date={result.jquants_date}")
@@ -508,6 +566,7 @@ def run_pipeline_daily(
     typer.echo(f"no_data={result.no_data_count}")
     typer.echo(f"yahoo_rows={result.yahoo_row_count}")
     typer.echo(f"yahoo_no_data_tickers={result.yahoo_no_data_ticker_count}")
+    typer.echo(f"duration_seconds={result.duration_seconds:.3f}")
     typer.echo(f"uploaded_files={result.publish_result.uploaded_count}")
     typer.echo(f"loaded_partitions={result.load_result.loaded_partition_count}")
     typer.echo(f"loaded_rows={result.load_result.loaded_row_count}")

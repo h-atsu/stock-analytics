@@ -287,7 +287,7 @@ yfinanceの取得条件は実装内の固定値から開始し、不要なCLIオ
 - GCS backend接続を除くoffline検証で`terraform validate`とダミーprojectへの`terraform plan -refresh=false`が成功し、2 resources add、0 change、0 destroyを確認した。
 - gcloudの既定projectが未設定のため、state bucket作成、GCS backend初期化、実プロジェクトへのplan/applyは未実施。
 
-### Task 9: データ基盤Terraform — 着手（BigQuery・raw GCS実装済み）
+### Task 9: データ基盤Terraform — 実装済み（apply待ち）
 
 - raw用GCS bucketを作る。
 - BigQueryは`stock_analytics`単一datasetから始め、raw・staging・intermediate・martsはテーブル名で区別する。
@@ -307,6 +307,9 @@ yfinanceの取得条件は実装内の固定値から開始し、不要なCLIオ
 - raw bucketはuniform bucket-level access、public access prevention、7日間のsoft delete、`force_destroy=false`を設定する。
 - raw objectは`ingested_at`付きのimmutable pathに保存するため、bucket versioningと自動削除は現時点で追加しない。
 - raw GCS追加後のoffline Terraform planは合計6 resources add、0 change、0 destroyで成功した。
+- 日次Job用とScheduler起動用のservice accountを分離した。
+- 日次Jobにはraw bucketのobject viewer・creator、BigQuery job user、dataset data editor、J-Quants secret accessorだけを付与した。service account keyは作成しない。
+- `jquants-api-key`はGCPコンソールで手動作成・登録し、Terraformはdata sourceとして参照する。secret本体と値はstateへ含めない。
 
 ### Task 10: GCS publishとBigQuery load — 実装済み（全raw load確認待ち）
 
@@ -443,7 +446,7 @@ Asia/Tokyoを基準にする。休場日やno-dataは正常なno-opとし、検�
 - 休場日などJ-Quantsの空レスポンスは`no_data`へ計上し、Yahoo Financeと後続処理を継続する。
 - 自動テスト72件、Ruff、format、ty、dbt parseが成功した。固定`as-of`の実GCP一巡確認はTask 16のservice account・secret・Job作成後に行う。
 
-### Task 16: Cloud Run Jobと運用確認 — 未着手
+### Task 16: Cloud Run Jobと運用確認 — 実装済み（apply・運用確認待ち）
 
 - 平日21時JSTに単一Cloud Run Jobを起動する。
 - 初期値は2 vCPU、4 GiB、最大60分、Scheduler retry最大3回とする。
@@ -452,6 +455,17 @@ Asia/Tokyoを基準にする。休場日やno-dataは正常なno-opとし、検�
 - Cloud Logging alertで失敗を通知する。
 
 完了条件: 日次実行、再実行、欠損ticker、J-Quants後着、secret参照をGCP上で確認できること。
+
+実装・検証結果（2026-08-22、途中）:
+
+- 単一のCloud Run Job `stock-analytics-daily`を2 vCPU、4 GiB、timeout 60分、task retry 0で定義した。
+- Cloud Schedulerは`0 21 * * 1-5`、Asia/TokyoでJob実行APIを呼び、起動API失敗時は最大3回retryする。
+- Scheduler用service accountには対象Jobの`roles/run.invoker`だけを付与した。
+- Cloud Runでは`--as-of`を省略してAsia/Tokyoの当日を使い、`--structured-logs`で対象期間、source、件数、欠損ticker数、所要時間、成否をJSON出力する。
+- 対象Cloud Run JobのERROR logに一致するLogMatch alertとemail notification channelを追加した。
+- 手動登録済みsecretとArtifact Registry上のimageを前提に、Cloud Run JobとSchedulerを1回のapplyで作成する構成にした。
+- Google provider 7.41.0でTerraform validateに成功した。手動secret方式への変更後は、実projectへのapplyでCloud Run Job作成直前まで完了し、未pushのimage参照で停止した。
+- Python自動テスト72件、Ruff、format、tyが成功した。実projectへのapply、通知channel verify、固定`as-of`の手動Job実行、Scheduler起動は未確認。
 
 ## 全体テスト方針
 

@@ -54,3 +54,50 @@ terraform apply terraform.tfplan
 ```
 
 `terraform.tfvars`、state、planはGit管理対象外です。`apply`前にplan内容を確認してください。
+
+## 日次Cloud Run Jobのセットアップ
+
+Terraformの実行前に、GCPコンソールのSecret Managerで`jquants-api-key`を作成し、有効なversionへJ-Quants APIキーを登録します。Secret本体と値はTerraformで管理せず、既存secretをdata sourceとして参照します。
+
+`terraform.tfvars`へproject IDと通知先を設定します。
+
+```hcl
+project_id  = "YOUR_GCP_PROJECT_ID"
+alert_email = "you@example.com"
+```
+
+初回はCloud Run Jobが参照するimageを先にArtifact Registryへpushします。
+
+```bash
+gcloud auth configure-docker asia-northeast1-docker.pkg.dev
+
+IMAGE="asia-northeast1-docker.pkg.dev/${STOCK_ANALYTICS_PROJECT_ID}/stock-analytics/stock-analytics:latest"
+docker buildx build --platform linux/amd64 --tag "$IMAGE" --push ..
+```
+
+準備後は1回のplanとapplyで、API、service account、IAM、Cloud Run Job、Scheduler、監視を作成します。
+
+```bash
+terraform plan -out=terraform.tfplan
+terraform apply terraform.tfplan
+```
+
+作成される日次処理:
+
+- Cloud Run Job `stock-analytics-daily`: 2 vCPU、4 GiB、timeout 60分、task retryなし
+- Cloud Scheduler `stock-analytics-daily`: 平日21:00、Asia/Tokyo、起動API失敗時は最大3回retry
+- J-Quants APIキー: Secret Managerの`latest` versionを環境変数へ注入
+- Cloud Logging: 対象JobのERROR logを検知し、指定メールへ通知
+
+SchedulerのretryはCloud Run起動API自体の失敗に対するものです。起動後のpipeline失敗は重複取得を避けるため自動再実行せず、alert確認後に次のコマンドで手動再実行します。
+
+```bash
+gcloud run jobs execute stock-analytics-daily \
+  --project "$STOCK_ANALYTICS_PROJECT_ID" \
+  --region asia-northeast1 \
+  --wait
+```
+
+初回apply後、Google Cloudから届く通知channel確認メールでメールアドレスをverifyしてください。
+
+dbtやアプリを更新するときは、commit SHAなどの一意なimage tagでbuild・pushし、`daily_job_image_tag`を指定してapplyします。同じ`latest`をpushし直すだけではCloud Run Jobの更新をTerraformが検知できません。

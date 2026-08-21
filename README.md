@@ -212,6 +212,8 @@ docker run --rm \
 
 Terraform構成は`infra/`直下で管理します。初回のstate bucket作成とGCS backendへの移行手順は[`infra/README.md`](infra/README.md)を参照してください。
 
+日次Cloud Run Jobは平日21時JSTに起動します。Cloud Runでは`--structured-logs`を有効にし、対象日、source、件数、欠損ticker数、所要時間をJSONでCloud Loggingへ記録します。Secretの手動登録、image push、Terraform applyの手順も[`infra/README.md`](infra/README.md)に記載しています。
+
 ## 開発時の検証
 
 ```bash

@@ -93,6 +93,7 @@ def test_run_daily_pipeline_runs_fixed_date_end_to_end(
         jquants_client=cast(DailyPipelineJQuantsClient, object()),
         progress=messages.append,
         sleep=lambda seconds: None,
+        clock=iter((100.0, 112.5)).__next__,
     )
 
     assert requested == [date(2026, 5, 29)] * 3
@@ -100,6 +101,7 @@ def test_run_daily_pipeline_runs_fixed_date_end_to_end(
     assert result.skipped_artifact_count == 1
     assert result.no_data_count == 1
     assert result.yahoo_row_count == 20
+    assert result.duration_seconds == 12.5
     assert result.load_result.loaded_partition_count == 7
     assert dbt_calls == [
         ("test-project", "stock_analytics", "asia-northeast1", Path("dbt"))

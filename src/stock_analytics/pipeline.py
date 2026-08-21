@@ -62,6 +62,7 @@ class DailyPipelineResult:
     no_data_count: int
     yahoo_row_count: int
     yahoo_no_data_ticker_count: int
+    duration_seconds: float
     publish_result: GcsPublishResult
     load_result: BigQueryLoadResult
 
@@ -110,8 +111,10 @@ def run_daily_pipeline(
     jquants_client: DailyPipelineJQuantsClient | None = None,
     progress: Progress = lambda _message: None,
     sleep: Sleep = time.sleep,
+    clock: Callable[[], float] = time.monotonic,
 ) -> DailyPipelineResult:
     """Run one deterministic ingestion, publish, load, and dbt cycle."""
+    started_at = clock()
     jquants_date = as_of - JQUANTS_DELAY
     yahoo_start_date = as_of - YAHOO_LOOKBACK
     jpx_root = output_root / "jpx"
@@ -183,6 +186,7 @@ def run_daily_pipeline(
         no_data_count=no_data,
         yahoo_row_count=yahoo_result.row_count,
         yahoo_no_data_ticker_count=yahoo_result.no_data_ticker_count,
+        duration_seconds=clock() - started_at,
         publish_result=publish_result,
         load_result=load_result,
     )
