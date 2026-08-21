@@ -415,7 +415,7 @@ yfinanceの取得条件は実装内の固定値から開始し、不要なCLIオ
 - 小期間の一巡確認用にJ-QuantsとYahooの開始日だけ上書き可能とした。
 - 固定日付を使ったbootstrap、skip、日付範囲の自動テストが成功した。実データの全期間bootstrapは未実施。
 
-### Task 15: 日次パイプライン — 未着手
+### Task 15: 日次パイプライン — 実装済み（GCP確認待ち）
 
 `pipeline daily --as-of`で次を直列実行する。
 
@@ -430,6 +430,18 @@ yfinanceの取得条件は実装内の固定値から開始し、不要なCLIオ
 Asia/Tokyoを基準にする。休場日やno-dataは正常なno-opとし、検証失敗は後続へ渡さない。
 
 完了条件: 固定した`as-of`でローカルとCloud Run Jobの結果が一致すること。
+
+実装・検証結果（2026-08-22、途中）:
+
+- `stock-analytics pipeline daily --as-of ... --project ... --bucket ...`を追加した。`--as-of`省略時はAsia/Tokyoの当日を使う。
+- GCSから最新のJPX artifactを一時directoryへ復元してから公式Excelのハッシュを確認し、Cloud Runの一時filesystemでも未変更スナップショットを重複保存しない。
+- J-Quantsは`as-of - 84日`の日足・財務サマリー・決算予定を同一clientで取得し、Freeプランのレート制限と429 retryをbootstrapと同じ規約で適用する。
+- Yahoo Financeは`as-of - 7日`から`as-of`までを包含で再取得する。
+- 全ingestionの検証完了後にGCSへpublishするため、検証失敗時はBigQueryとdbtへ進まない。
+- BigQueryはGCS上の全履歴を再loadせず、今回対象のJ-Quants partition、Yahoo期間・coverage、最新JPX partitionだけを`WRITE_TRUNCATE`で置換する。
+- リポジトリ内の環境変数ベース`dbt/profiles.yml`を使って`dbt build`を実行し、同じdbt projectをDocker imageにも含める。
+- 休場日などJ-Quantsの空レスポンスは`no_data`へ計上し、Yahoo Financeと後続処理を継続する。
+- 自動テスト72件、Ruff、format、ty、dbt parseが成功した。固定`as-of`の実GCP一巡確認はTask 16のservice account・secret・Job作成後に行う。
 
 ### Task 16: Cloud Run Jobと運用確認 — 未着手
 

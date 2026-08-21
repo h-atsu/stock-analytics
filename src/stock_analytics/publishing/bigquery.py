@@ -4,6 +4,7 @@ import re
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import date, timedelta
 from typing import Protocol, cast
 
 from google.cloud import bigquery, storage
@@ -142,6 +143,34 @@ def _replace_table(
     )
 
 
+def _only_partitions(
+    objects_by_date: dict[str, list[str]],
+    partition_dates: Iterable[date],
+) -> dict[str, list[str]]:
+    requested = {value.isoformat() for value in partition_dates}
+    return {
+        partition_date: object_names
+        for partition_date, object_names in objects_by_date.items()
+        if partition_date in requested
+    }
+
+
+def _latest_partition(
+    objects_by_date: dict[str, list[str]],
+) -> dict[str, list[str]]:
+    if not objects_by_date:
+        return {}
+    latest = max(objects_by_date)
+    return {latest: objects_by_date[latest]}
+
+
+def _dates_between(start_date: date, end_date: date) -> Iterable[date]:
+    current = start_date
+    while current <= end_date:
+        yield current
+        current += timedelta(days=1)
+
+
 def load_raw_daily_bars(
     bucket_name: str,
     project_id: str,
@@ -182,6 +211,106 @@ def load_raw_daily_bars(
         loaded_row_count=(
             jquants_result.loaded_row_count + yahoo_result.loaded_row_count
         ),
+    )
+
+
+def load_daily_pipeline_artifacts(
+    bucket_name: str,
+    project_id: str,
+    jquants_date: date,
+    yahoo_start_date: date,
+    yahoo_end_date: date,
+    dataset_id: str = "stock_analytics",
+    *,
+    storage_client: StorageClientLike | None = None,
+    bigquery_client: BigQueryClientLike | None = None,
+) -> BigQueryLoadResult:
+    """Load only the raw partitions touched by one daily pipeline run."""
+    if yahoo_start_date > yahoo_end_date:
+        raise ValueError("Yahooの開始日は終了日以前にしてください")
+
+    gcs = storage_client or cast(StorageClientLike, storage.Client(project=project_id))
+    bq = bigquery_client or cast(
+        BigQueryClientLike, bigquery.Client(project=project_id)
+    )
+    table_prefix = f"{project_id}.{dataset_id}"
+    yahoo_dates = tuple(_dates_between(yahoo_start_date, yahoo_end_date))
+
+    specs = (
+        (
+            "jquants/equity_daily_bars",
+            "trade_date",
+            f"{table_prefix}.raw_jquants_equity_daily_bars",
+            "Date",
+            "Code",
+            (jquants_date,),
+        ),
+        (
+            "jquants/financial_summary",
+            "disclosure_date",
+            f"{table_prefix}.raw_jquants_financial_summary",
+            "DiscDate",
+            "Code",
+            (jquants_date,),
+        ),
+        (
+            "jquants/earnings_date",
+            "publication_date",
+            f"{table_prefix}.raw_jquants_earnings_date",
+            "PubDate",
+            "Code",
+            (jquants_date,),
+        ),
+        (
+            "yfinance/equity_daily_bars",
+            "trade_date",
+            f"{table_prefix}.raw_yahoo_equity_daily_bars",
+            "trade_date",
+            "yahoo_ticker",
+            yahoo_dates,
+        ),
+        (
+            "yfinance/equity_daily_bars_coverage",
+            "start_date",
+            f"{table_prefix}.raw_yahoo_equity_daily_bars_coverage",
+            "start_date",
+            "yahoo_ticker",
+            (yahoo_start_date,),
+        ),
+    )
+    results: list[BigQueryLoadResult] = []
+    for prefix, partition_name, table_id, date_field, cluster_field, dates in specs:
+        objects = _completed_parquet_by_partition(
+            gcs, bucket_name, prefix, partition_name
+        )
+        results.append(
+            _load_partitions(
+                bq,
+                bucket_name,
+                table_id,
+                date_field,
+                cluster_field,
+                _only_partitions(objects, dates),
+            )
+        )
+
+    jpx_objects = _completed_parquet_by_partition(
+        gcs, bucket_name, "jpx/listed_issues", "snapshot_date"
+    )
+    results.append(
+        _load_partitions(
+            bq,
+            bucket_name,
+            f"{table_prefix}.raw_jpx_listed_issues",
+            "snapshot_date",
+            "security_code",
+            _latest_partition(jpx_objects),
+        )
+    )
+
+    return BigQueryLoadResult(
+        loaded_partition_count=sum(result.loaded_partition_count for result in results),
+        loaded_row_count=sum(result.loaded_row_count for result in results),
     )
 
 

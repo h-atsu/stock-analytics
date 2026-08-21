@@ -176,6 +176,19 @@ uv run stock-analytics bootstrap raw \
 
 正常なmanifestがあるJ-Quants partitionと、同一期間のYahoo coverageがあるrunはスキップします。途中で失敗した場合は、同じコマンドを再実行してください。休場日や開示データがない日は`no_data`として扱います。J-QuantsはFreeプランの毎分5リクエスト制限を超えないよう、リクエストごとに13秒間隔を空けます。429応答時は60秒、120秒、240秒の順に待機して再試行します。
 
+## 日次パイプライン
+
+JPX一覧の変更確認、J-Quantsの12週遅延日、Yahoo Financeの直近7暦日の取得、GCS publish、対象BigQuery partitionの置換、`dbt build`を直列実行します。
+
+```bash
+uv run stock-analytics pipeline daily \
+  --as-of 2026-08-21 \
+  --project stock-analytics-505614 \
+  --bucket stock-analytics-505614-stock-analytics-raw
+```
+
+`--as-of`を省略するとAsia/Tokyoの当日を使用します。固定した日付を指定すれば、ローカルとCloud Run Jobで同じ対象期間を再実行できます。J-Quantsの休場日や開示データがない日は正常な`no_data`として扱い、Yahoo Financeと後続処理は継続します。検証またはdbt testが失敗した場合は非ゼロ終了します。
+
 ## Docker実行
 
 Cloud Run Jobで使用する本番イメージをローカルでビルドできます。`.env`と取得済みデータはイメージに含まれません。
@@ -228,5 +241,7 @@ cp dbt/profiles.yml.example ~/.dbt/profiles.yml
 export GCP_PROJECT_ID=stock-analytics-505614
 uv run dbt build --project-dir dbt --select tag:staging
 ```
+
+日次パイプラインはリポジトリ内の`dbt/profiles.yml`を使用するため、Cloud RunではサービスアカウントのApplication Default Credentialsがそのまま使われます。
 
 main branchのdbt関連ファイルを更新すると、GitHub Actionsがdbt Docsを生成してGitHub Pagesへ公開します。初回だけrepositoryのPages sourceを`GitHub Actions`へ設定してください。

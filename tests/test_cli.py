@@ -1,3 +1,4 @@
+from datetime import date
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -6,6 +7,7 @@ from stock_analytics.bootstrap import BootstrapResult
 from stock_analytics.cli import app
 from stock_analytics.ingestion.storage import IngestionArtifact, ListedIssuesArtifact
 from stock_analytics.ingestion.yahoo import YahooIngestionResult
+from stock_analytics.pipeline import DailyPipelineResult
 from stock_analytics.publishing.bigquery import BigQueryLoadResult
 from stock_analytics.publishing.gcs import GcsPublishResult
 
@@ -365,3 +367,58 @@ def test_bootstrap_raw_command(monkeypatch, tmp_path: Path) -> None:
     assert "fetched_artifacts=7" in result.stdout
     assert "yahoo_rows=100" in result.stdout
     assert "loaded_rows=200" in result.stdout
+
+
+def test_pipeline_daily_command(monkeypatch, tmp_path: Path) -> None:
+    def fake_pipeline(
+        as_of,
+        project_id,
+        bucket_name,
+        output_root,
+        dataset_id,
+        region,
+        **kwargs,
+    ) -> DailyPipelineResult:
+        assert as_of.isoformat() == "2026-08-21"
+        assert project_id == "test-project"
+        assert bucket_name == "raw-bucket"
+        assert output_root == tmp_path
+        assert dataset_id == "stock_analytics"
+        assert region == "asia-northeast1"
+        assert kwargs["progress"] is not None
+        return DailyPipelineResult(
+            as_of=as_of,
+            jquants_date=date(2026, 5, 29),
+            yahoo_start_date=date(2026, 8, 14),
+            fetched_artifact_count=8,
+            skipped_artifact_count=1,
+            no_data_count=2,
+            yahoo_row_count=100,
+            yahoo_no_data_ticker_count=3,
+            publish_result=GcsPublishResult(16, 2),
+            load_result=BigQueryLoadResult(7, 200),
+        )
+
+    monkeypatch.setattr("stock_analytics.cli.run_daily_pipeline", fake_pipeline)
+
+    result = runner.invoke(
+        app,
+        [
+            "pipeline",
+            "daily",
+            "--as-of",
+            "2026-08-21",
+            "--project",
+            "test-project",
+            "--bucket",
+            "raw-bucket",
+            "--output-dir",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "jquants_date=2026-05-29" in result.stdout
+    assert "yahoo_start_date=2026-08-14" in result.stdout
+    assert "yahoo_no_data_tickers=3" in result.stdout
+    assert "loaded_partitions=7" in result.stdout

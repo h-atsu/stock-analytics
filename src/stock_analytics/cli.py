@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import re
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Annotated
+from zoneinfo import ZoneInfo
 
 import pandera.pandas as pa
 import typer
@@ -21,6 +22,7 @@ from stock_analytics.ingestion.yahoo import (
     ingest_yahoo_daily_bars,
     load_latest_yahoo_tickers,
 )
+from stock_analytics.pipeline import DEFAULT_REGION, run_daily_pipeline
 from stock_analytics.publishing.bigquery import (
     load_all_raw_artifacts,
     load_raw_daily_bars,
@@ -32,10 +34,12 @@ ingest_app = typer.Typer(no_args_is_help=True, help="Ingest source data.")
 publish_app = typer.Typer(no_args_is_help=True, help="Publish validated data.")
 load_app = typer.Typer(no_args_is_help=True, help="Load published data.")
 bootstrap_app = typer.Typer(no_args_is_help=True, help="Bootstrap initial data.")
+pipeline_app = typer.Typer(no_args_is_help=True, help="Run production pipelines.")
 app.add_typer(ingest_app, name="ingest")
 app.add_typer(publish_app, name="publish")
 app.add_typer(load_app, name="load")
 app.add_typer(bootstrap_app, name="bootstrap")
+app.add_typer(pipeline_app, name="pipeline")
 
 
 def _parse_iso_date(value: str) -> date:
@@ -45,6 +49,10 @@ def _parse_iso_date(value: str) -> date:
         return date.fromisoformat(value)
     except ValueError as exc:
         raise typer.BadParameter("YYYY-MM-DD形式で指定してください。") from exc
+
+
+def _today_in_tokyo() -> date:
+    return datetime.now(ZoneInfo("Asia/Tokyo")).date()
 
 
 @ingest_app.command("daily-bars")
@@ -435,6 +443,71 @@ def run_bootstrap_raw(
     typer.echo(f"skipped_partitions={result.skipped_partition_count}")
     typer.echo(f"no_data={result.no_data_count}")
     typer.echo(f"yahoo_rows={result.yahoo_row_count}")
+    typer.echo(f"uploaded_files={result.publish_result.uploaded_count}")
+    typer.echo(f"loaded_partitions={result.load_result.loaded_partition_count}")
+    typer.echo(f"loaded_rows={result.load_result.loaded_row_count}")
+
+
+@pipeline_app.command("daily")
+def run_pipeline_daily(
+    project: Annotated[
+        str,
+        typer.Option("--project", help="GCP project ID。"),
+    ],
+    bucket: Annotated[
+        str,
+        typer.Option("--bucket", help="raw artifactのGCS bucket名。"),
+    ],
+    as_of: Annotated[
+        str | None,
+        typer.Option(
+            "--as-of",
+            help="処理基準日（YYYY-MM-DD）。省略時はAsia/Tokyoの当日。",
+        ),
+    ] = None,
+    output_dir: Annotated[
+        Path,
+        typer.Option(
+            "--output-dir",
+            help="一時的なlocal rawデータのルート。",
+            file_okay=False,
+            dir_okay=True,
+        ),
+    ] = Path("data/raw"),
+    dataset: Annotated[
+        str,
+        typer.Option("--dataset", help="BigQuery dataset ID。"),
+    ] = "stock_analytics",
+    region: Annotated[
+        str,
+        typer.Option("--region", help="BigQueryとCloud RunのGCP region。"),
+    ] = DEFAULT_REGION,
+) -> None:
+    """日次データを取得し、GCS・BigQuery・dbtまで直列実行する。"""
+    load_dotenv()
+    parsed_as_of = _parse_iso_date(as_of) if as_of is not None else _today_in_tokyo()
+    try:
+        result = run_daily_pipeline(
+            parsed_as_of,
+            project,
+            bucket,
+            output_dir,
+            dataset,
+            region,
+            progress=typer.echo,
+        )
+    except Exception as exc:
+        typer.echo(f"日次pipelineに失敗しました: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(f"as_of={result.as_of}")
+    typer.echo(f"jquants_date={result.jquants_date}")
+    typer.echo(f"yahoo_start_date={result.yahoo_start_date}")
+    typer.echo(f"fetched_artifacts={result.fetched_artifact_count}")
+    typer.echo(f"skipped_artifacts={result.skipped_artifact_count}")
+    typer.echo(f"no_data={result.no_data_count}")
+    typer.echo(f"yahoo_rows={result.yahoo_row_count}")
+    typer.echo(f"yahoo_no_data_tickers={result.yahoo_no_data_ticker_count}")
     typer.echo(f"uploaded_files={result.publish_result.uploaded_count}")
     typer.echo(f"loaded_partitions={result.load_result.loaded_partition_count}")
     typer.echo(f"loaded_rows={result.load_result.loaded_row_count}")

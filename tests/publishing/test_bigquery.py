@@ -1,9 +1,11 @@
 from dataclasses import dataclass
+from datetime import date
 
 from google.cloud import bigquery
 
 from stock_analytics.publishing.bigquery import (
     load_all_raw_artifacts,
+    load_daily_pipeline_artifacts,
     load_raw_daily_bars,
 )
 
@@ -137,3 +139,38 @@ def test_load_all_raw_artifacts_loads_reference_tables() -> None:
         "test-project.stock_analytics.raw_jpx_listed_issues",
         "test-project.stock_analytics.raw_yahoo_equity_daily_bars_coverage",
     ]
+
+
+def test_load_daily_pipeline_artifacts_loads_only_touched_partitions() -> None:
+    storage_client = FakeStorageClient(
+        [
+            "jquants/equity_daily_bars/trade_date=2026-05-29/ingested_at=run/manifest.json",
+            "jquants/equity_daily_bars/trade_date=2026-05-30/ingested_at=old/manifest.json",
+            "jquants/financial_summary/disclosure_date=2026-05-29/ingested_at=run/manifest.json",
+            "jquants/earnings_date/publication_date=2026-05-29/ingested_at=run/manifest.json",
+            "yfinance/equity_daily_bars/trade_date=2026-08-19/ingested_at=run/manifest.json",
+            "yfinance/equity_daily_bars/trade_date=2026-08-20/ingested_at=run/manifest.json",
+            "yfinance/equity_daily_bars/trade_date=2026-08-01/ingested_at=old/manifest.json",
+            "yfinance/equity_daily_bars_coverage/start_date=2026-08-14/end_date=2026-08-21/ingested_at=run/manifest.json",
+            "jpx/listed_issues/snapshot_date=2026-06-30/ingested_at=old/manifest.json",
+            "jpx/listed_issues/snapshot_date=2026-07-31/ingested_at=run/manifest.json",
+        ]
+    )
+    bigquery_client = FakeBigQueryClient()
+
+    result = load_daily_pipeline_artifacts(
+        "raw-bucket",
+        "test-project",
+        date(2026, 5, 29),
+        date(2026, 8, 14),
+        date(2026, 8, 21),
+        storage_client=storage_client,
+        bigquery_client=bigquery_client,
+    )
+
+    assert result.loaded_partition_count == 7
+    assert result.loaded_row_count == 70
+    destinations = [destination for _, destination, _ in bigquery_client.loads]
+    assert all("20260530" not in destination for destination in destinations)
+    assert all("20260801" not in destination for destination in destinations)
+    assert destinations[-1].endswith("raw_jpx_listed_issues$20260731")

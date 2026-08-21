@@ -2,14 +2,31 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Callable
+import os
+import re
+import tempfile
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol, cast
 
 from google.api_core.exceptions import PreconditionFailed
 from google.cloud import storage
 
 UploadFile = Callable[[Path, str, str], bool]
+
+
+class DownloadBlobLike(Protocol):
+    @property
+    def name(self) -> str: ...
+
+    def download_to_filename(self, filename: str) -> None: ...
+
+
+class DownloadStorageClientLike(Protocol):
+    def list_blobs(
+        self, bucket_name: str, *, prefix: str
+    ) -> Iterable[DownloadBlobLike]: ...
 
 
 @dataclass(frozen=True)
@@ -114,3 +131,62 @@ def publish_raw_artifacts(
         uploaded_count=uploaded_count,
         skipped_count=skipped_count,
     )
+
+
+def _download_atomically(blob: DownloadBlobLike, target: Path) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        dir=target.parent,
+        prefix=f".{target.name}-",
+        delete=False,
+    ) as temporary:
+        temporary_path = Path(temporary.name)
+    try:
+        blob.download_to_filename(str(temporary_path))
+        os.replace(temporary_path, target)
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
+def sync_latest_listed_issues_artifact(
+    bucket_name: str,
+    output_root: Path,
+    *,
+    storage_client: DownloadStorageClientLike | None = None,
+) -> bool:
+    """Restore the latest completed JPX artifact to an ephemeral work directory."""
+    client = storage_client or cast(DownloadStorageClientLike, storage.Client())
+    prefix = "jpx/listed_issues/"
+    pattern = re.compile(
+        r"^jpx/listed_issues/snapshot_date=\d{4}-\d{2}-\d{2}/"
+        r"ingested_at=[^/]+/manifest\.json$"
+    )
+    blobs = {
+        blob.name: blob
+        for blob in client.list_blobs(bucket_name, prefix=prefix)
+        if blob.name.endswith(("/manifest.json", "/data.parquet"))
+    }
+    manifests = sorted(name for name in blobs if pattern.fullmatch(name))
+    if not manifests:
+        return False
+
+    manifest_object = manifests[-1]
+    parquet_object = manifest_object.removesuffix("manifest.json") + "data.parquet"
+    if parquet_object not in blobs:
+        raise FileNotFoundError(
+            f"JPX manifestに対応するGCS Parquetがありません: {parquet_object}"
+        )
+
+    manifest_path = output_root / manifest_object
+    parquet_path = output_root / parquet_object
+    if not manifest_path.is_file():
+        _download_atomically(blobs[manifest_object], manifest_path)
+    if not parquet_path.is_file():
+        _download_atomically(blobs[parquet_object], parquet_path)
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if manifest.get("sha256") != _sha256(parquet_path):
+        raise ValueError(
+            f"GCSから復元したJPX ParquetのSHA-256が一致しません: {parquet_path}"
+        )
+    return True

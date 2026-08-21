@@ -5,7 +5,11 @@ from pathlib import Path
 import pytest
 from google.api_core.exceptions import PreconditionFailed
 
-from stock_analytics.publishing.gcs import _gcs_uploader, publish_raw_artifacts
+from stock_analytics.publishing.gcs import (
+    _gcs_uploader,
+    publish_raw_artifacts,
+    sync_latest_listed_issues_artifact,
+)
 
 
 def write_artifact(root: Path, content: bytes = b"parquet") -> tuple[Path, Path]:
@@ -94,3 +98,44 @@ def test_gcs_uploader_skips_existing_object(monkeypatch, tmp_path) -> None:
     uploader = _gcs_uploader("raw-bucket")
 
     assert uploader(tmp_path / "data.parquet", "data.parquet", "test/type") is False
+
+
+def test_sync_latest_listed_issues_artifact_downloads_completed_latest_run(
+    tmp_path: Path,
+) -> None:
+    parquet = b"latest parquet"
+    manifest = json.dumps({"sha256": hashlib.sha256(parquet).hexdigest()}).encode()
+    prefix = "jpx/listed_issues/snapshot_date=2026-07-31/ingested_at=20260821T120000Z/"
+    objects = {
+        prefix + "data.parquet": parquet,
+        prefix + "manifest.json": manifest,
+        "jpx/listed_issues/snapshot_date=2026-06-30/"
+        "ingested_at=old/manifest.json": b"{}",
+    }
+
+    class FakeBlob:
+        def __init__(self, name: str, content: bytes) -> None:
+            self.name = name
+            self.content = content
+
+        def download_to_filename(self, filename: str) -> None:
+            Path(filename).write_bytes(self.content)
+
+    class FakeClient:
+        def list_blobs(self, bucket_name: str, *, prefix: str) -> list[FakeBlob]:
+            assert bucket_name == "raw-bucket"
+            return [
+                FakeBlob(name, content)
+                for name, content in objects.items()
+                if name.startswith(prefix)
+            ]
+
+    restored = sync_latest_listed_issues_artifact(
+        "raw-bucket",
+        tmp_path,
+        storage_client=FakeClient(),
+    )
+
+    assert restored is True
+    assert (tmp_path / prefix / "data.parquet").read_bytes() == parquet
+    assert (tmp_path / prefix / "manifest.json").read_bytes() == manifest
