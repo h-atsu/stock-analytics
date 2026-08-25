@@ -112,3 +112,5 @@ stagingでは価格調整、J-Quants優先、最新銘柄スナップショッ�
 `int_yahoo__daily_prices`はYahooの4桁コードへ末尾`0`を付け、J-Quantsの5桁コードへ揃えます。YahooのOHLC・出来高はvendor側で原則split調整済みのため、`Stock Splits`を再適用しません。`Adj Close`は配当を含み得る比較用vendor値として別に保持します。
 
 `int_stock__daily_prices`はJ-QuantsとYahooをfull outer joinし、同じ銘柄・取引日にJ-Quants行があれば、価格がnullでもJ-Quants行を採用します。Yahoo採用行は`price_source='yahoo'`かつ`is_provisional=true`です。Yahooの配当・splitはJ-Quants価格を採用した日にも保持します。
+
+J-Quantsの`AdjC`とYahooの`Close`は、企業行動の種類や適用時期によって調整基準が一致しないことがあります。そのためsource間の価格差テストはwarningとして扱い、canonicalデータの更新を停止しません。価格列、source優先順位、既知の差異、品質判定の詳細は[`docs/data-model.md`](../docs/data-model.md)を参照してください。
