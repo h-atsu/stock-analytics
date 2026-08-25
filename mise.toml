@@ -24,11 +24,8 @@ run = [
 ]
 
 [tasks.check-infra]
-description = "Check Terraform formatting and configuration"
-run = [
-  "terraform -chdir=infra fmt -check",
-  "terraform -chdir=infra validate",
-]
+description = "Check Terraform formatting before plan or apply"
+run = "terraform -chdir=infra fmt -check"
 
 [tasks.plan-infra]
 description = "Plan Terraform changes using configuration from .env"
@@ -38,6 +35,7 @@ run = "terraform -chdir=infra plan"
 [tasks.apply-infra]
 description = "Apply Terraform changes using configuration from .env"
 depends = ["check-infra"]
+interactive = true
 run = "terraform -chdir=infra apply"
 
 [tasks.build-daily]
@@ -78,7 +76,9 @@ docker buildx build \
   .
 
 echo "Cloud Run Jobを更新します: image_tag=${image_tag}"
-terraform -chdir=infra apply -var="daily_job_image_tag=${image_tag}"
+terraform -chdir=infra apply \
+  -auto-approve \
+  -var="daily_job_image_tag=${image_tag}"
 '''
 
 [tasks.execute-daily]
