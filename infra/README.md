@@ -44,7 +44,7 @@ gcloud storage buckets update \
 
 ```bash
 cd infra
-cp terraform.tfvars.example terraform.tfvars
+cp ../.env.example ../.env
 # terraform.tfvarsのproject_idを変更する
 
 terraform init \
@@ -53,17 +53,18 @@ terraform plan -out=terraform.tfplan
 terraform apply terraform.tfplan
 ```
 
-`terraform.tfvars`、state、planはGit管理対象外です。`apply`前にplan内容を確認してください。
+`.env`、state、planはGit管理対象外です。`apply`前にplan内容を確認してください。
 
 ## 日次Cloud Run Jobのセットアップ
 
 Terraformの実行前に、GCPコンソールのSecret Managerで`jquants-api-key`を作成し、有効なversionへJ-Quants APIキーを登録します。Secret本体と値はTerraformで管理せず、既存secretをdata sourceとして参照します。
 
-`terraform.tfvars`へproject IDと通知先を設定します。
+repository rootの`.env`へproject ID、region、通知先を設定します。miseがTerraform用の`TF_VAR_*`へ変換するため、`infra/terraform.tfvars`は使用しません。
 
-```hcl
-project_id  = "YOUR_GCP_PROJECT_ID"
-alert_email = "you@example.com"
+```dotenv
+GCP_PROJECT_ID=stock-analytics-505614
+GCP_REGION=asia-northeast1
+ALERT_EMAIL=you@example.com
 ```
 
 初回はCloud Run Jobが参照するimageを先にArtifact Registryへpushします。
@@ -71,15 +72,15 @@ alert_email = "you@example.com"
 ```bash
 gcloud auth configure-docker asia-northeast1-docker.pkg.dev
 
-IMAGE="asia-northeast1-docker.pkg.dev/${STOCK_ANALYTICS_PROJECT_ID}/stock-analytics/stock-analytics:latest"
+IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/stock-analytics/stock-analytics:latest"
 docker buildx build --platform linux/amd64 --tag "$IMAGE" --push ..
 ```
 
 準備後は1回のplanとapplyで、API、service account、IAM、Cloud Run Job、Scheduler、監視を作成します。
 
 ```bash
-terraform plan -out=terraform.tfplan
-terraform apply terraform.tfplan
+mise run plan-infra
+mise run apply-infra
 ```
 
 作成される日次処理:
@@ -93,8 +94,8 @@ SchedulerのretryはCloud Run起動API自体の失敗に対するものです。
 
 ```bash
 gcloud run jobs execute stock-analytics-daily \
-  --project "$STOCK_ANALYTICS_PROJECT_ID" \
-  --region asia-northeast1 \
+  --project "$GCP_PROJECT_ID" \
+  --region "$GCP_REGION" \
   --wait
 ```
 

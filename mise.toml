@@ -1,0 +1,96 @@
+[tools]
+uv = "latest"
+
+[env]
+_.file = { path = ".env", redact = true }
+TF_VAR_project_id = "{{ env.GCP_PROJECT_ID }}"
+TF_VAR_region = "{{ env.GCP_REGION }}"
+TF_VAR_alert_email = "{{ env.ALERT_EMAIL }}"
+
+[tasks.sync]
+description = "Sync Python dependencies with uv"
+run = "uv sync"
+
+[tasks.check]
+description = "Run application, dbt, and SQL checks"
+depends = ["sync"]
+run = [
+  "uv run ruff check .",
+  "uv run ruff format --check .",
+  "uv run ty check",
+  "uv run pytest",
+  "uv run dbt parse --project-dir dbt --profiles-dir dbt",
+  "uv run sqlfluff lint dbt/models dbt/tests",
+]
+
+[tasks.check-infra]
+description = "Check Terraform formatting and configuration"
+run = [
+  "terraform -chdir=infra fmt -check",
+  "terraform -chdir=infra validate",
+]
+
+[tasks.plan-infra]
+description = "Plan Terraform changes using configuration from .env"
+depends = ["check-infra"]
+run = "terraform -chdir=infra plan"
+
+[tasks.apply-infra]
+description = "Apply Terraform changes using configuration from .env"
+depends = ["check-infra"]
+run = "terraform -chdir=infra apply"
+
+[tasks.build-daily]
+description = "Build the daily Cloud Run image locally"
+run = '''
+set -eu
+
+docker buildx build \
+  --platform linux/amd64 \
+  --tag stock-analytics-daily:local \
+  --load \
+  .
+'''
+
+[tasks.deploy-daily]
+description = "Check, build, push, and deploy the daily Cloud Run image"
+depends = ["check"]
+run = '''
+set -eu
+
+if [ -n "$(git status --porcelain --untracked-files=normal)" ]; then
+  echo "deployを中止しました: commitされていない変更があります" >&2
+  exit 1
+fi
+
+: "${GCP_PROJECT_ID:?deployを中止しました: .envにGCP_PROJECT_IDを設定してください}"
+: "${GCP_REGION:?deployを中止しました: .envにGCP_REGIONを設定してください}"
+
+image_tag="$(git rev-parse --short=12 HEAD)"
+image="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/stock-analytics/stock-analytics:${image_tag}"
+
+echo "Docker imageをpushします: ${image}"
+gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+docker buildx build \
+  --platform linux/amd64 \
+  --tag "$image" \
+  --push \
+  .
+
+echo "Cloud Run Jobを更新します: image_tag=${image_tag}"
+terraform -chdir=infra apply -var="daily_job_image_tag=${image_tag}"
+'''
+
+[tasks.execute-daily]
+description = "Execute the deployed daily Cloud Run Job and wait for completion"
+run = '''
+set -eu
+
+: "${GCP_PROJECT_ID:?実行を中止しました: .envにGCP_PROJECT_IDを設定してください}"
+: "${GCP_REGION:?実行を中止しました: .envにGCP_REGIONを設定してください}"
+
+gcloud run jobs execute stock-analytics-daily \
+  --project "$GCP_PROJECT_ID" \
+  --region "$GCP_REGION" \
+  --wait
+'''

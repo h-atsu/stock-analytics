@@ -216,6 +216,27 @@ Terraform構成は`infra/`直下で管理します。初回のstate bucket作成
 
 J-QuantsとYahoo Financeのsource優先順位、暫定価格、企業行動による価格差、dbtの品質判定は[`docs/data-model.md`](docs/data-model.md)に記載しています。
 
+## miseタスク
+
+`mise.toml`では`uv`自体のversionと、日常的な検証・デプロイ操作を管理します。Python packageの依存関係は引き続き`uv.lock`が正本です。
+
+```bash
+mise trust
+mise install
+mise run sync
+mise run check
+mise run check-infra
+mise run plan-infra
+mise run apply-infra
+mise run build-daily
+mise run deploy-daily
+mise run execute-daily
+```
+
+`.env.example`を`.env`へコピーし、GCP project、region、通知先、ローカル実行用J-Quants API keyを設定します。`.env`をローカル設定のSSoTとし、miseがアプリへ環境変数を渡すと同時に、Terraform用の`TF_VAR_project_id`、`TF_VAR_region`、`TF_VAR_alert_email`へ変換します。`infra/terraform.tfvars`は使用しません。
+
+`deploy-daily`は未commitの変更がある場合に停止し、現在のcommit SHAをDocker image tagとしてArtifact Registryへpushした後、TerraformでCloud Run Jobを更新します。GCPへの変更を伴うため自動実行せず、明示的に呼び出してください。
+
 ## 開発時の検証
 
 ```bash
