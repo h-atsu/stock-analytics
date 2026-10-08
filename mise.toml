@@ -1,4 +1,5 @@
 [tools]
+terraform = "1.15"
 uv = "latest"
 
 [env]
