@@ -52,7 +52,11 @@ class _ListedIssuesLinkParser(HTMLParser):
         if tag != "a":
             return
         for name, value in attrs:
-            if name == "href" and value is not None and value.endswith("data_j.xls"):
+            if (
+                name == "href"
+                and value is not None
+                and value.endswith(("data_j.xls", "data_j.xlsx"))
+            ):
                 self.hrefs.append(value)
 
 
@@ -65,6 +69,7 @@ def _http_get(url: str) -> bytes:
 def find_listed_issues_url(page_content: bytes) -> str:
     parser = _ListedIssuesLinkParser()
     parser.feed(page_content.decode("utf-8"))
+
     if len(parser.hrefs) != 1:
         raise ValueError("JPX上場銘柄一覧のExcelリンクを一意に特定できませんでした")
 
@@ -76,7 +81,7 @@ def find_listed_issues_url(page_content: bytes) -> str:
 
 
 def normalize_listed_issues(source_content: bytes) -> pd.DataFrame:
-    frame = pd.read_excel(BytesIO(source_content), engine="xlrd", dtype=str)
+    frame = pd.read_excel(BytesIO(source_content), dtype=str)
     if set(frame.columns) != set(SOURCE_COLUMNS):
         raise ValueError("JPX上場銘柄一覧の列構成が変更されています")
 

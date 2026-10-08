@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pandas as pd
 
@@ -42,6 +43,12 @@ def test_find_listed_issues_url_resolves_official_relative_link() -> None:
     assert find_listed_issues_url(page) == SOURCE_URL
 
 
+def test_find_listed_issues_url_accepts_xlsx() -> None:
+    page = b'<a href="example-att/data_j.xlsx">Excel</a>'
+
+    assert find_listed_issues_url(page) == f"{SOURCE_URL}x"
+
+
 def test_normalize_listed_issues_preserves_all_instruments(monkeypatch) -> None:
     monkeypatch.setattr(pd, "read_excel", lambda *args, **kwargs: source_frame())
 
@@ -50,6 +57,15 @@ def test_normalize_listed_issues_preserves_all_instruments(monkeypatch) -> None:
     assert normalized["security_code"].tolist() == ["1301", "1305", "25935"]
     assert normalized["sector_33_code"].tolist() == ["0050", pd.NA, "3050"]
     assert normalized["yahoo_ticker"].tolist() == ["1301.T", "1305.T", pd.NA]
+
+
+def test_normalize_listed_issues_reads_xlsx(tmp_path: Path) -> None:
+    source = tmp_path / "data_j.xlsx"
+    source_frame().to_excel(source, index=False, engine="openpyxl")
+
+    normalized = normalize_listed_issues(source.read_bytes())
+
+    assert normalized["security_code"].tolist() == ["1301", "1305", "25935"]
 
 
 def test_ingest_listed_issues_downloads_validates_and_stores(
